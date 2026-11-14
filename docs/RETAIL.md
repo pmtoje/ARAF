@@ -47,6 +47,29 @@ A COMPLETED application keeps its facility ACTIVE until repayments settle it and
 
 Non-material corrections go back to the stage (and person) that asked.
 
+### CX approval policy (`RETAIL_CX_V1`)
+
+Each product configuration version names its **approval chain** (*Approval chain* in Products and rules). The chain is pinned on a request at first submission; requests already submitted keep theirs. Migration 025 proposes `RETAIL_CX_V1` for Vendor Financing, Alt Drive and Alt Power (with the affordability policy); it applies once a Product Config Approver approves those versions.
+
+```
+Initiator (RM, Delight Officer, Team Lead or Unit Head) ─submit─▶ TEAM_LEAD_REVIEW ("Team Lead certification")
+  ─certify─▶ FIRST_CREDIT_REVIEW ("CX credit review", role CX_CREDIT_REVIEWER, final assessment, no amount routes)
+  ─approve─▶ UNIT_HEAD_REVIEW ─approve─▶ DIVISIONAL_HEAD_REVIEW ─approve─▶ OFFER_PREPARATION … (existing post-approval)
+Any stage: Return (with reason) or Reject (with reason).
+```
+
+The Head of Retail Sales, Head of Unit, Outlet Service Supervisor and second credit review stages are not used under this policy. The CX Credit Reviewer role is granted by a Super Admin like any role; holding Super Admin never confers it.
+
+**Originators who hold an approval role.** Team Leads and Unit Heads can initiate requests on CX-policy products (Initiate New Request); they write their own credit proposal (first-level analysis). Routing rules, applied on the server and recorded as `ROUTING_RULE_APPLIED` with the rule and reason:
+
+| Rule | When | Effect |
+|---|---|---|
+| `TL_ORIGINATOR_CERTIFICATION` | A Team Lead originates | Team Lead certification is skipped; the request goes to CX credit review |
+| `UH_ORIGINATOR_CERTIFICATION` | A Unit Head originates | Team Lead certification is skipped; the request goes to CX credit review |
+| `UH_ORIGINATOR_UNIT_HEAD_STAGE` | A Unit Head originates and no other Unit Head is eligible | The Unit Head stage is skipped; the request goes to the Divisional Head |
+
+CX credit review and the Divisional Head are never skipped. Everyone who acted earlier on a request (including its originator) is excluded from later stages; when nobody is eligible the task opens unassigned in the assignment exception queue. Team Leads and Unit Heads cannot submit products still on the standard chain.
+
 ## 2. Configuration (Administration → Products and rules)
 
 Each product has versioned rules (`product_configs`).

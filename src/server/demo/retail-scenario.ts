@@ -60,10 +60,11 @@ export function syntheticConfig(productCode: string, tweak?: (c: ProductConfig) 
   return c;
 }
 
-export const INITIATORS = { RM: "rm.bola@altbank.ng", DO: "do.ife@altbank.ng" } as const;
+export const INITIATORS = { RM: "rm.bola@altbank.ng", DO: "do.ife@altbank.ng", TL: "tl.lagos@altbank.ng", UH: "unit.head@altbank.ng" } as const;
+const INITIATOR_ROLE = { RM: "RM", DO: "DELIGHT_OFFICER", TL: "TEAM_LEAD", UH: "UNIT_HEAD" } as const;
 
 export interface RetailCaseOpts {
-  channel: "RM" | "DO";
+  channel: "RM" | "DO" | "TL" | "UH";
   product: string;
   profile: "SALARY_EARNER" | "BUSINESS_OWNER";
   structure?: string | null;
@@ -101,7 +102,7 @@ export async function createRetailCase(o: RetailCaseOpts) {
   const initiatorEmail = INITIATORS[o.channel];
   const ctx = await ctxFor(initiatorEmail, now);
   const type: ApplicantType = o.type ?? (o.profile === "SALARY_EARNER" ? "INDIVIDUAL" : "ENTERPRISE");
-  const { id } = await createRetailDraft(ctx, { initiatorRole: o.channel === "RM" ? "RM" : "DELIGHT_OFFICER", productCode: o.product, profile: o.profile, structure: o.structure ?? null, applicantType: type });
+  const { id } = await createRetailDraft(ctx, { initiatorRole: INITIATOR_ROLE[o.channel], productCode: o.product, profile: o.profile, structure: o.structure ?? null, applicantType: type });
   const v = await vendorAccount(o.product === "ALT_DRIVE" ? "Synthetic Motors Ltd" : o.product === "ALT_POWER" ? "Synthetic Solar Ltd" : "Synthetic Distributors Ltd");
   const outlet = o.channel === "DO" ? (await db.query("SELECT id FROM locations WHERE name = $1", [o.outlet ?? "Yaba Altbox"])).rows[0].id : null;
   const rmId = o.channel === "DO" ? await staffId(o.assignedRm ?? "rm.bola@altbank.ng") : null;

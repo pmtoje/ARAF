@@ -5,7 +5,7 @@ import { AlertTriangle, CheckCircle2, Circle } from "lucide-react";
 import { db } from "@/server/db";
 import type { getCase } from "@/server/domain/views";
 import { CATEGORY_LABEL, PACK } from "@/server/domain/documents";
-import { STAGE_LABELS, type Stage } from "@/server/domain/stages";
+import { STAGE_LABELS, stageLabel, type Stage } from "@/server/domain/stages";
 import { ROLE_LABELS, type Role } from "@/server/domain/roles";
 import { configById, configGaps, effectiveConfig, gapsBlocking, profileRules, structureRules, PROFILE_LABELS, STRUCTURE_LABELS, INSURANCE_LABELS, DSR_DENOMINATOR_LABELS, ANNUAL_DENOMINATORS, FULFILMENT_LABELS, roleLabel, type CustomerProfile, type StructureCode, type FulfilmentKind } from "@/server/domain/products";
 import { retailDataSchema } from "@/server/domain/retail-data";
@@ -317,7 +317,7 @@ export async function RetailActionPanel({ c, task, doneHref }: { c: Case; task: 
         body.push(
           <div key="prior" className="summary-box small">
             <p className="eyebrow">Prior recommendations</p>
-            {priorDecisions.map((d: { id: string; stage: string; actor_name: string; action: string; reason: string | null }) => <p key={d.id} style={{ margin: "0 0 6px" }}><strong>{STAGE_LABELS[d.stage as Stage]}</strong> · {d.actor_name}: {d.reason}</p>)}
+            {priorDecisions.map((d: { id: string; stage: string; actor_name: string; action: string; reason: string | null }) => <p key={d.id} style={{ margin: "0 0 6px" }}><strong>{stageLabel(d.stage as Stage, app.approval_policy)}</strong> · {d.actor_name}: {d.reason}</p>)}
           </div>,
         );
       if (tlBlocked.length) body.push(<Blocked key="tlb">Blocked until configured: {tlBlocked.map((g) => g.label).join("; ")}.</Blocked>);
@@ -376,7 +376,7 @@ export async function RetailActionPanel({ c, task, doneHref }: { c: Case; task: 
         body.push(<TaskButton key="ap" hidden={hidden} action="APPROVE" label="Approve credit appraisal" doneHref={doneHref} disabled={!current} />);
         secondary.push(["RETURN", "Return to initiator for correction", false], ["REJECT", "Decline", true]);
       } else {
-        body.push(<TaskButton key="rs" hidden={hidden} action="RESUBMIT" label={`Resubmit to ${STAGE_LABELS[(openCorrection?.from_stage as Stage) ?? "SECOND_CREDIT_REVIEW"]}`} doneHref={doneHref} />);
+        body.push(<TaskButton key="rs" hidden={hidden} action="RESUBMIT" label={`Resubmit to ${stageLabel((openCorrection?.from_stage as Stage) ?? "SECOND_CREDIT_REVIEW", app.approval_policy)}`} doneHref={doneHref} />);
         secondary.push(["REQUEST_INITIATOR", "Request changes from the initiator", false]);
       }
       break;

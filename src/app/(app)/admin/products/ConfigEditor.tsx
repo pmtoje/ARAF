@@ -51,6 +51,16 @@ export function ConfigEditor({ productCode, initial, roles, canPropose }: { prod
       <input type="hidden" name="config" value={advanced ? raw : JSON.stringify(cfg)} />
       <p className="small muted" style={{ margin: 0 }}>Fields shown as “Not configured” block the actions listed above. Nothing is filled in automatically. A different person holding the configuration approver role must approve the change.</p>
       <div className="grid-3">
+        <Sel
+          id={`${productCode}-policy`}
+          label="Approval chain"
+          value={cfg.approvalPolicy ?? "STANDARD"}
+          options={[
+            ["STANDARD", "Standard: Team Lead → Head of Retail Sales → Head of Unit → credit reviews → Unit Head → DH"],
+            ["RETAIL_CX_V1", "CX policy: Team Lead certification → CX credit review → Unit Head → DH"],
+          ]}
+          onChange={(v) => upd((c) => (c.approvalPolicy = v as "STANDARD" | "RETAIL_CX_V1"))}
+        />
         <Sel id={`${productCode}-hou`} label="Head of Unit stage" value={cfg.businessReview.headOfUnitStage ?? ""} options={[["", "Not configured"], ["DISTINCT", "Distinct stage after Head of Retail Sales"], ["NOT_REQUIRED", "Not required"]]} onChange={(v) => upd((c) => (c.businessReview.headOfUnitStage = v || null))} />
         <Sel id={`${productCode}-rr`} label="Restructuring approval role" value={cfg.servicing.restructureApproverRole ?? ""} options={roleOpts} onChange={(v) => upd((c) => (c.servicing.restructureApproverRole = v || null))} />
         <Txt id={`${productCode}-exp`} label="Draft expiry (days, blank = never)" value={cfg.draftExpiryDays ?? ""} onChange={(v) => upd((c) => (c.draftExpiryDays = nOrNull(v)))} />

@@ -33,7 +33,7 @@ import { beneficiaryFor, beneficiaryProblems, type BeneficiarySnapshot } from ".
 import { listLocations, snapshotOf, type LocationRow } from "./locations";
 import { isRetailInitiatorRole, ROLE_LABELS, type Role } from "./roles";
 import { routeForAmount } from "./routing";
-import { STAGE_LABELS, type Stage } from "./stages";
+import { STAGE_LABELS, stageLabel, type Stage } from "./stages";
 import { recordRequestLedger, noteLatestRequestedAmount } from "./wallet";
 import { retailCreditBlockers } from "./retail-credit";
 import {
@@ -63,7 +63,7 @@ import { bookFacility, reconcilePayment, completeFulfilment, beneficiaryRevalida
 export async function createRetailDraft(ctx: Ctx, p: { initiatorRole: string; productCode: string; profile: string; structure?: string | null; applicantType: ApplicantType }) {
   const actor = ctx.actor;
   if (!actor) throw forbidden();
-  if (!isRetailInitiatorRole(p.initiatorRole)) throw invalid("Retail products are initiated by Relationship Managers and Delight Officers.");
+  if (!isRetailInitiatorRole(p.initiatorRole)) throw invalid("Retail products are initiated by Relationship Managers, Delight Officers, Team Leads and Unit Heads.");
   return withTx(async (tx) => {
     const ra = (
       await tx.query(
@@ -348,7 +348,7 @@ export async function retailReadiness(q: Db, appId: string, now: Date): Promise<
   // --- facility
   if (data.requestedAmountKobo === null || data.requestedAmountKobo <= 0) e.requestedAmountKobo = "Enter the requested amount.";
   else if (rules?.maxAmountKobo != null && data.requestedAmountKobo > rules.maxAmountKobo) e.requestedAmountKobo = `The maximum for this product is ${formatKobo(rules.maxAmountKobo)}.`;
-  else {
+  else if (cfg?.config.approvalPolicy !== "RETAIL_CX_V1") {
     try {
       routeForAmount(data.requestedAmountKobo);
     } catch {
@@ -569,8 +569,55 @@ async function finaliseRetailVersion(tx: Tx, ctx: Ctx, app: AppRow): Promise<{ m
   return { material, readiness, cfg, rules, data };
 }
 
-function firstBusinessStage(app: AppRow): Stage {
+const isCx = (app: AppRow) => app.approval_policy === "RETAIL_CX_V1";
+
+/**
+ * Routing rules for originators who hold an approval role (RETAIL_CX_V1). A stage that would assign the request back
+ * to its originator is skipped by a named rule, recorded in the audit trail; CX credit review and the Divisional Head
+ * are never skipped.
+ */
+export const ROUTING_RULES = {
+  TL_ORIGINATOR_CERTIFICATION: "Originated by a Team Lead: their own analysis is the first-level analysis and they cannot certify it, so the request goes to independent CX credit review.",
+  UH_ORIGINATOR_CERTIFICATION: "Originated by a Unit Head: Team Lead certification of a Unit Head's own request is not independent, so the request goes to independent CX credit review.",
+  UH_ORIGINATOR_UNIT_HEAD_STAGE: "Originated by a Unit Head and no other Unit Head is eligible: the Unit Head stage would return to the originator, so the request goes to the Divisional Head.",
+} as const;
+async function applyRoutingRule(tx: Tx, ctx: Ctx, app: AppRow, rule: keyof typeof ROUTING_RULES, skipped: Stage) {
+  await audit(tx, ctx, { action: "ROUTING_RULE_APPLIED", applicationId: app.id, stage: skipped, reason: ROUTING_RULES[rule], details: { rule, skippedStage: skipped, policy: app.approval_policy, initiatorRole: app.initiator_role } });
+}
+
+/** The first business stage, or null when the policy's routing rules send the request straight to credit. */
+function firstBusinessStage(app: AppRow): Stage | null {
+  if (isCx(app)) return app.initiator_role === "TEAM_LEAD" || app.initiator_role === "UNIT_HEAD" ? null : "TEAM_LEAD_REVIEW";
   return app.initiator_role === "DELIGHT_OFFICER" ? "OSS_REVIEW" : "TEAM_LEAD_REVIEW";
+}
+
+/** Route to the first business stage (or straight to credit under a routing rule). Returns the outcome message. */
+async function routeFromSubmission(tx: Tx, ctx: Ctx, app: AppRow, note?: string): Promise<string> {
+  const stage = firstBusinessStage(app);
+  if (stage === null) {
+    await applyRoutingRule(tx, ctx, app, app.initiator_role === "TEAM_LEAD" ? "TL_ORIGINATOR_CERTIFICATION" : "UH_ORIGINATOR_CERTIFICATION", "TEAM_LEAD_REVIEW");
+    return enterCredit(tx, ctx, app);
+  }
+  const chosen = await chooseAssignee(tx, app, stage, { preferred: stage === "OSS_REVIEW" ? app.oss_reviewer_id : app.team_lead_id });
+  if (stage === "OSS_REVIEW") app.oss_reviewer_id = chosen.staffId;
+  else app.team_lead_id = chosen.staffId;
+  await moveTo(tx, ctx, app, stage, chosen, note);
+  return chosen.staffId
+    ? `Submitted to ${stageLabel(stage, app.approval_policy).toLowerCase()} (${chosen.pool.find((p) => p.staff_id === chosen.staffId)?.full_name}).`
+    : `Submitted. No eligible reviewer is in scope for ${stageLabel(stage, app.approval_policy).toLowerCase()}; the request is in the assignment exception queue.`;
+}
+
+/** After CX credit review: the Unit Head (another Unit Head when the originator is one), else the Divisional Head. */
+async function enterUnitHead(tx: Tx, ctx: Ctx, app: AppRow): Promise<string> {
+  const chosen = await chooseAssignee(tx, app, "UNIT_HEAD_REVIEW", {});
+  if (!chosen.staffId && app.initiator_role === "UNIT_HEAD") {
+    await applyRoutingRule(tx, ctx, app, "UH_ORIGINATOR_UNIT_HEAD_STAGE", "UNIT_HEAD_REVIEW");
+    const dh = await chooseAssignee(tx, app, "DIVISIONAL_HEAD_REVIEW", {});
+    await moveTo(tx, ctx, app, "DIVISIONAL_HEAD_REVIEW", dh);
+    return "CX credit review approved. The originator is the Unit Head, so the request goes to the Divisional Head.";
+  }
+  await moveTo(tx, ctx, app, "UNIT_HEAD_REVIEW", chosen);
+  return chosen.staffId ? "CX credit review approved. Sent to the Unit Head." : "CX credit review approved. No eligible Unit Head is available; the request is in the assignment exception queue.";
 }
 
 export async function submitRetail(tx: Tx, ctx: Ctx, app: AppRow): Promise<ActionResult> {
@@ -582,14 +629,15 @@ export async function submitRetail(tx: Tx, ctx: Ctx, app: AppRow): Promise<Actio
   (app as { submitted_at: Date | null }).submitted_at = ctx.now;
   await tx.query("UPDATE applications SET submitted_at = $2 WHERE id = $1", [app.id, ctx.now]);
   await recordRequestLedger(tx, app, ctx.now);
-  await audit(tx, ctx, { action: "REQUEST_SUBMITTED", actorRole: app.initiator_role, applicationId: app.id, customerId: app.customer_id, stage: "DRAFT", details: { versionId: app.current_version_id, product: app.product_code, configVersion: cfg.version, channel: app.initiator_role } });
-  const stage = firstBusinessStage(app);
-  const chosen = await chooseAssignee(tx, app, stage, {});
-  if (stage === "OSS_REVIEW") app.oss_reviewer_id = chosen.staffId;
-  else app.team_lead_id = chosen.staffId;
-  await moveTo(tx, ctx, app, stage, chosen);
+  if ((app.initiator_role === "TEAM_LEAD" || app.initiator_role === "UNIT_HEAD") && cfg.config.approvalPolicy !== "RETAIL_CX_V1")
+    throw gate("Team Leads and Unit Heads can submit only products on the CX approval policy, which routes their requests to independent reviewers.");
+  // The approval policy is pinned at first submission and kept for the life of the request.
+  app.approval_policy = cfg.config.approvalPolicy;
+  await tx.query("UPDATE applications SET approval_policy = $2 WHERE id = $1", [app.id, app.approval_policy]);
+  await audit(tx, ctx, { action: "REQUEST_SUBMITTED", actorRole: app.initiator_role, applicationId: app.id, customerId: app.customer_id, stage: "DRAFT", details: { versionId: app.current_version_id, product: app.product_code, configVersion: cfg.version, channel: app.initiator_role, approvalPolicy: app.approval_policy } });
+  const message = await routeFromSubmission(tx, ctx, app);
   await persistApp(tx, app, ctx.now);
-  return { applicationId: app.id, stage: app.stage, message: chosen.staffId ? `Submitted to ${STAGE_LABELS[stage].toLowerCase()} (${chosen.pool.find((p) => p.staff_id === chosen.staffId)?.full_name}).` : `Submitted. No eligible reviewer is in scope for ${STAGE_LABELS[stage].toLowerCase()}; the request is in the assignment exception queue.` };
+  return { applicationId: app.id, stage: app.stage, message };
 }
 
 // ------------------------------------------------------------------ material change / resubmission
@@ -626,12 +674,8 @@ export async function retailResubmit(tx: Tx, ctx: Ctx, app: AppRow, task: TaskRo
     app.route = null;
     app.first_reviewer_id = null;
     app.second_reviewer_id = null;
-    const stage = firstBusinessStage(app);
-    const chosen = await chooseAssignee(tx, app, stage, { preferred: stage === "OSS_REVIEW" ? app.oss_reviewer_id : app.team_lead_id });
-    if (stage === "OSS_REVIEW") app.oss_reviewer_id = chosen.staffId;
-    else app.team_lead_id = chosen.staffId;
-    await moveTo(tx, ctx, app, stage, chosen, "Reassessment after material change");
-    return `Material change detected${changes.length ? ` (${changes.join(", ")})` : ""}: business and credit approvals and any offer were invalidated; the request restarts at ${STAGE_LABELS[stage].toLowerCase()}.`;
+    await routeFromSubmission(tx, ctx, app, "Reassessment after material change");
+    return `Material change detected${changes.length ? ` (${changes.join(", ")})` : ""}: business and credit approvals and any offer were invalidated; the request restarts at ${stageLabel(app.stage, app.approval_policy).toLowerCase()}.`;
   }
   await resolveCorrection(tx, ctx, corr.id, "RESUBMITTED");
   app.active_correction_id = corr.parent_id;
@@ -643,6 +687,17 @@ export async function retailResubmit(tx: Tx, ctx: Ctx, app: AppRow, task: TaskRo
 // ------------------------------------------------------------------ dispatch for retail stages
 
 async function enterCredit(tx: Tx, ctx: Ctx, app: AppRow): Promise<string> {
+  if (isCx(app)) {
+    // CX credit review: one independent credit stage, not routed by amount.
+    app.business_approved_at = ctx.now;
+    await tx.query("UPDATE applications SET business_approved_at = $2 WHERE id = $1", [app.id, ctx.now]);
+    app.endorser_id = app.team_lead_id ?? null;
+    app.route = null;
+    const chosen = await chooseAssignee(tx, app, "FIRST_CREDIT_REVIEW", { preferred: app.first_reviewer_id });
+    app.first_reviewer_id = chosen.staffId;
+    await moveTo(tx, ctx, app, "FIRST_CREDIT_REVIEW", chosen);
+    return chosen.staffId ? "Sent to CX credit review." : "No eligible CX Credit Reviewer is available; the request is in the assignment exception queue.";
+  }
   let route;
   try {
     route = routeForAmount(Number(app.requested_amount_kobo));
@@ -720,6 +775,7 @@ export async function retailDispatch(tx: Tx, ctx: Ctx, app: AppRow, task: TaskRo
       }
       if (task.stage === "TEAM_LEAD_REVIEW") {
         app.team_lead_id = ctx.actor!.staffId;
+        if (isCx(app)) return `Certified. ${await enterCredit(tx, ctx, app)}`;
         const chosen = await chooseAssignee(tx, app, "HRS_REVIEW", { preferred: app.hrs_id });
         app.hrs_id = chosen.staffId;
         await moveTo(tx, ctx, app, "HRS_REVIEW", chosen);
@@ -760,6 +816,7 @@ export async function retailDispatch(tx: Tx, ctx: Ctx, app: AppRow, task: TaskRo
       if (ben.length) throw gate(`Beneficiary revalidation required: ${ben.join(" ")}`);
       await recordDecision(tx, ctx, app, task, a, reason, null, finalRow.id);
       await completeTask(tx, ctx, task, a, { retailAssessmentId: finalRow.id, configVersion: cfg.version, attestedAt: ctx.now.toISOString() });
+      if (isCx(app)) return enterUnitHead(tx, ctx, app);
       const chosen = await chooseAssignee(tx, app, "SECOND_CREDIT_REVIEW", { preferred: app.second_reviewer_id, random: true });
       app.second_reviewer_id = chosen.staffId;
       await moveTo(tx, ctx, app, "SECOND_CREDIT_REVIEW", chosen);
@@ -955,8 +1012,10 @@ export async function saveProposal(ctx: Ctx, appId: string, content: Partial<Pro
     if (app.workflow !== "RETAIL") throw invalid("Not a retail application.");
     if (!["DRAFT", "INITIATOR_CORRECTION"].includes(app.stage)) throw forbidden("The credit proposal can be edited while the request is a draft or under correction.");
     const responsible = app.initiator_role === "DELIGHT_OFFICER" ? app.assigned_rm_id : app.initiator_id;
-    const isResponsibleRm = responsible === actor.staffId && (await holdsRole(tx, actor.staffId, "RM"));
-    if (!isResponsibleRm) throw forbidden(app.initiator_role === "DELIGHT_OFFICER" ? "The credit proposal is written by the assigned Relationship Manager." : "Only the initiating Relationship Manager can write the credit proposal.");
+    // The first-level analysis is the RM's; a Team Lead or Unit Head who originates writes their own.
+    const authorRole = app.initiator_role === "TEAM_LEAD" || app.initiator_role === "UNIT_HEAD" ? app.initiator_role : "RM";
+    const isResponsibleRm = responsible === actor.staffId && (await holdsRole(tx, actor.staffId, authorRole));
+    if (!isResponsibleRm) throw forbidden(app.initiator_role === "DELIGHT_OFFICER" ? "The credit proposal is written by the assigned Relationship Manager." : "Only the originating officer can write the credit proposal.");
     const clean: Record<string, string> = {};
     for (const f of PROPOSAL_FIELDS) clean[f.key] = String(content[f.key] ?? "").trim().slice(0, 4000);
     const next = (await tx.query<{ v: number }>("SELECT coalesce(max(version_no),0)+1 AS v FROM credit_proposals WHERE application_id = $1", [appId])).rows[0].v;

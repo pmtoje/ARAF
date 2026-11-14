@@ -24,7 +24,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const ws = session.activeRole as Role | null;
   const queueCount = Number((await db.query("SELECT count(*) AS n FROM tasks WHERE status = 'OPEN' AND assignee_id = $1", [session.staffId])).rows[0].n);
   const altWs = ws === "DELIGHT_OFFICER" || ws === "SMILE_ASSOCIATE";
-  const isInitiatorWs = isInitiatorRole(ws) && !altWs;
+  // Team Leads and Unit Heads may also originate retail requests (never reviewing their own).
+  const isInitiatorWs = (isInitiatorRole(ws) || ws === "TEAM_LEAD" || ws === "UNIT_HEAD") && !altWs;
   const alt = await altphonesAccess(db, session.staffId);
   const altMigration = (await migrationAccess(db, session.staffId)).view;
   const altLocations = (await locationAccess(db, session.staffId)).view;

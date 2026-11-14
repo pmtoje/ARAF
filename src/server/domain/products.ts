@@ -152,8 +152,17 @@ export const profileRulesSchema = z.object({
 });
 export type ProfileRules = z.infer<typeof profileRulesSchema>;
 
+export const APPROVAL_POLICIES = ["STANDARD", "RETAIL_CX_V1"] as const;
+export type ApprovalPolicy = (typeof APPROVAL_POLICIES)[number];
+export const APPROVAL_POLICY_LABELS: Record<ApprovalPolicy, string> = {
+  STANDARD: "Standard: Team Lead → Head of Retail Sales → Head of Unit → first and second credit review → Unit Head → Divisional Head",
+  RETAIL_CX_V1: "CX policy: Team Lead certification → CX credit review → Unit Head → Divisional Head",
+};
+
 export const productConfigSchema = z.object({
   profiles: z.object({ SALARY_EARNER: profileRulesSchema.optional(), BUSINESS_OWNER: profileRulesSchema.optional() }),
+  /** Approval chain for requests submitted under this version (pinned on each request at first submission). */
+  approvalPolicy: z.enum(APPROVAL_POLICIES).default("STANDARD"),
   businessReview: z.object({
     /** DISTINCT: Head of Unit approval is a separate stage after Head of Retail Sales. */
     headOfUnitStage: z.enum(["DISTINCT", "NOT_REQUIRED"]).nullable(),
