@@ -22,7 +22,7 @@ export interface RetailFormProps {
   savedAt: string;
   structure: string | null;
   structures: { code: string; label: string; rate: string; insurance: string; convention: string }[];
-  limits: { maxAmountKobo: number | null; maxTenorMonths: number | null; dsrMax: string | null; denominator: string | null; statementMonths: number | null; payslipMonths: number | null; equityApplies: boolean | null; equityMin: string | null; assetCriteria: string | null };
+  limits: { maxAmountKobo: number | null; maxTenorMonths: number | null; minTenorMonths?: number | null; fromAnnual?: boolean; recognitionPercent?: string; ratePercent?: string | null; dsrMax: string | null; denominator: string | null; statementMonths: number | null; payslipMonths: number | null; equityApplies: boolean | null; equityMin: string | null; assetCriteria: string | null };
   assetProduct: boolean;
   beneficiaryRequired: boolean;
   data: {
@@ -57,7 +57,7 @@ const SECTIONS = [
   { id: "customer", label: "Customer", keys: ["customerName", "businessName", "companyName", "registrationNumber", "phone", "email", "businessAddress", "bvn", "tin", "directors", "applicantType"] },
   { id: "work", label: "Employment or business", keys: ["employerName", "statedMonthlySalaryKobo", "salaryHistory", "businessSector", "statedMonthlyTurnoverKobo"] },
   { id: "facility", label: "Facility", keys: ["requestedAmountKobo", "tenorMonths", "structure", "purpose", "assetDescription", "assetCostKobo", "deliveryAddress", "equityContributionKobo"] },
-  { id: "affordability", label: "Obligations and DSR", keys: ["incomeBasisKobo", "proposedMonthlyObligationKobo", "obligations"] },
+  { id: "affordability", label: "Obligations and DSR", keys: ["incomeBasisKobo", "annualInflowKobo", "proposedMonthlyObligationKobo", "obligations"] },
   { id: "beneficiary", label: "Vendor and beneficiary", keys: ["vendorId", "vendorAccountId"] },
   { id: "origination", label: "Origination", keys: ["outletLocationId", "assignedRmId", "consent_"] },
   { id: "documents", label: "Documents", keys: ["doc_", "photos"] },
@@ -481,9 +481,15 @@ export function RetailDraftForm(props: RetailFormProps) {
             </div>
           </fieldset>
           <div className="grid-2">
-            <Field id="incomeBasisKobo" label={`Income basis for DSR${props.limits.denominator ? ` (${props.limits.denominator})` : ""}`} required error={fe("incomeBasisKobo")}>
-              <AmountInput id="incomeBasisKobo" value={money.incomeBasisKobo ?? ""} onChange={setM("incomeBasisKobo")} invalid={!!fe("incomeBasisKobo")} />
-            </Field>
+            {props.limits.fromAnnual ? (
+              <Field id="annualInflowKobo" label="Verified annual inflow" required hint={`Average monthly inflow = annual inflow × ${props.limits.recognitionPercent ?? "100"}% ÷ 12`} error={fe("annualInflowKobo")}>
+                <AmountInput id="annualInflowKobo" value={money.annualInflowKobo ?? ""} onChange={setM("annualInflowKobo")} invalid={!!fe("annualInflowKobo")} />
+              </Field>
+            ) : (
+              <Field id="incomeBasisKobo" label={`Income basis for DSR${props.limits.denominator ? ` (${props.limits.denominator})` : ""}`} required error={fe("incomeBasisKobo")}>
+                <AmountInput id="incomeBasisKobo" value={money.incomeBasisKobo ?? ""} onChange={setM("incomeBasisKobo")} invalid={!!fe("incomeBasisKobo")} />
+              </Field>
+            )}
             <Field id="proposedMonthlyObligationKobo" label="Proposed monthly repayment (estimate)" hint="Used only until the rate convention is configured; afterwards it is calculated from the terms.">
               <AmountInput id="proposedMonthlyObligationKobo" value={money.proposedMonthlyObligationKobo ?? ""} onChange={setM("proposedMonthlyObligationKobo")} />
             </Field>
@@ -491,6 +497,19 @@ export function RetailDraftForm(props: RetailFormProps) {
               <input id="incomeBasisNote" value={t.incomeBasisNote} onChange={set("incomeBasisNote")} placeholder="e.g. average of last 6 months' salary credits" />
             </Field>
           </div>
+          <LiveAffordability
+            annualInflowKobo={amountToKobo(money.annualInflowKobo ?? "")}
+            incomeBasisKobo={amountToKobo(money.incomeBasisKobo ?? "")}
+            fromAnnual={!!props.limits.fromAnnual}
+            recognitionPercent={props.limits.recognitionPercent ?? "100"}
+            existingKobo={obligationsTotal}
+            proposedKobo={amountToKobo(money.proposedMonthlyObligationKobo ?? "")}
+            requestedKobo={amountKobo}
+            tenor={Number.parseInt(tenor, 10) || null}
+            minTenor={props.limits.minTenorMonths ?? null}
+            ratePercent={props.limits.ratePercent ?? null}
+            dsrMax={props.limits.dsrMax}
+          />
           {r.preliminary && (
             <div className={`dsr-box ${r.preliminary.result === "PASS" ? "pass" : r.preliminary.result === "FAIL" ? "fail" : "blocked"}`} role="status">
               <div className="dsr-figure">
@@ -693,6 +712,72 @@ export function RetailDraftForm(props: RetailFormProps) {
           <Buttons isCorrection={props.isCorrection} setIntent={setIntent} dirty={dirty} />
         </section>
       </form>
+    </div>
+  );
+}
+
+/**
+ * Live affordability preview while the initiator fills the form. Display only: the saved preliminary assessment
+ * (server-side, exact arithmetic, stored with its rules and formula) is the record.
+ */
+function LiveAffordability(p: {
+  annualInflowKobo: number | null;
+  incomeBasisKobo: number | null;
+  fromAnnual: boolean;
+  recognitionPercent: string;
+  existingKobo: number;
+  proposedKobo: number | null;
+  requestedKobo: number | null;
+  tenor: number | null;
+  minTenor: number | null;
+  ratePercent: string | null;
+  dsrMax: string | null;
+}) {
+  const rec = Number(p.recognitionPercent) || 0;
+  const monthlyInflow = p.fromAnnual ? (p.annualInflowKobo ? (p.annualInflowKobo * rec) / 100 / 12 : null) : p.incomeBasisKobo;
+  const max = p.dsrMax !== null ? Number(p.dsrMax) : null;
+  const allowed = monthlyInflow !== null && max !== null ? (monthlyInflow * max) / 100 : null;
+  const total = p.proposedKobo !== null ? p.existingKobo + p.proposedKobo : null;
+  const dsr = total !== null && monthlyInflow ? (total / monthlyInflow) * 100 : null;
+  const tenorShort = p.tenor !== null && p.minTenor !== null && p.tenor < p.minTenor;
+  const status: "INCOMPLETE" | "WITHIN" | "EXCEEDS" = dsr === null || max === null ? "INCOMPLETE" : dsr <= max && !tenorShort ? "WITHIN" : "EXCEEDS";
+  const label = { INCOMPLETE: "Incomplete assessment", WITHIN: "Within approved threshold", EXCEEDS: tenorShort && dsr !== null && max !== null && dsr <= max ? "Below the minimum repayment period" : "Exceeds approved threshold" }[status];
+  const rows: [string, string][] = [
+    ...(p.fromAnnual
+      ? ([
+          ["Verified annual inflow", formatNaira(p.annualInflowKobo)],
+          ["Inflow recognised", `${p.recognitionPercent}%`],
+        ] as [string, string][])
+      : []),
+    [p.fromAnnual ? "Average monthly inflow" : "Monthly income basis", monthlyInflow !== null ? formatNaira(Math.round(monthlyInflow)) : "—"],
+    ["Existing monthly obligations", formatNaira(p.existingKobo)],
+    ["Requested financing", formatNaira(p.requestedKobo)],
+    ["Tenor", p.tenor ? `${p.tenor} months${p.minTenor ? ` (minimum ${p.minTenor})` : ""}` : "—"],
+    ["Pricing", p.ratePercent ? `${p.ratePercent}%` : "Not configured"],
+    ["Proposed monthly repayment", formatNaira(p.proposedKobo)],
+    ["Allowable monthly obligations", allowed !== null ? `${formatNaira(Math.round(allowed))} (${p.dsrMax}% of inflow)` : "—"],
+  ];
+  return (
+    <div className={`dsr-box ${status === "WITHIN" ? "pass" : status === "EXCEEDS" ? "fail" : "blocked"}`} role="status" aria-live="polite">
+      <div className="dsr-figure">
+        <span className="small muted">Affordability (live preview)</span>
+        <strong className="tnum">{dsr !== null ? `${dsr.toFixed(2)}%` : "—"}</strong>
+        <span className="small">
+          {label}
+          {max !== null ? ` · threshold ${p.dsrMax}%` : " · threshold not configured"}
+        </span>
+      </div>
+      <dl className="dsr-lines small">
+        {rows.map(([k, v]) => (
+          <div key={k}>
+            <dt>{k}</dt>
+            <dd className="tnum">{v}</dd>
+          </div>
+        ))}
+      </dl>
+      <p className="small muted" style={{ margin: 0 }}>
+        DSR = (existing obligations + proposed repayment) ÷ {p.fromAnnual ? "average monthly inflow" : "monthly income basis"}. The saved assessment is calculated on the server with exact figures and kept with the request.
+      </p>
     </div>
   );
 }

@@ -191,13 +191,15 @@ export async function driveBusinessReview(id: string, now = new Date()) {
   }
 }
 
-export async function recordFinal(id: string, o: { incomeBasisKobo?: number; principalKobo?: number; tenorMonths?: number; obligations?: { lender: string; monthlyRepaymentKobo: number }[] } = {}, now = new Date()) {
+export async function recordFinal(id: string, o: { incomeBasisKobo?: number; annualInflowKobo?: number; principalKobo?: number; tenorMonths?: number; obligations?: { lender: string; monthlyRepaymentKobo: number }[]; adjustmentNote?: string } = {}, now = new Date()) {
   const t = await openTaskOf(id);
   const ctx = await ctxFor(t.email!, now);
   const app = (await db.query("SELECT * FROM applications WHERE id = $1", [id])).rows[0];
   const v = (await db.query("SELECT data FROM application_versions WHERE id = $1", [app.current_version_id])).rows[0].data;
   return recordFinalAssessment(ctx, id, {
     incomeBasisKobo: o.incomeBasisKobo ?? v.incomeBasisKobo,
+    annualInflowKobo: o.annualInflowKobo ?? v.annualInflowKobo ?? null,
+    adjustmentNote: o.adjustmentNote ?? "Synthetic test: verified against statements",
     incomeBasisNote: "Verified from statements",
     statementFrom: addDaysToDateString(lagosDate(now), -200),
     statementTo: addDaysToDateString(lagosDate(now), -2),

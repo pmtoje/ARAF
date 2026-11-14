@@ -27,7 +27,7 @@ import { chooseAssignee, type AppRow } from "./assignment";
 import { currentCleanDocuments, listDocuments } from "./documents";
 import { checkPhotos, evaluateMatrix, type MatrixItem, type PhotoCheck } from "./doc-matrix";
 import { computeAffordability, rulesSnapshot, type AffordabilityInput, type AffordabilityOutput } from "./affordability";
-import { configById, configGaps, effectiveConfig, getProduct, gapsBlocking, profileRules, structureRules, type ConfigGap, type ProductConfigRow, type ProfileRules } from "./products";
+import { ANNUAL_DENOMINATORS, configById, configGaps, effectiveConfig, getProduct, gapsBlocking, profileRules, structureRules, type ConfigGap, type ProductConfigRow, type ProfileRules } from "./products";
 import { bvnError, phoneError, EMAIL_RE, retailDataSchema, retailDisplayName, retailMaterialDigest, type RetailData } from "./retail-data";
 import { beneficiaryFor, beneficiaryProblems, type BeneficiarySnapshot } from "./vendors";
 import { listLocations, snapshotOf, type LocationRow } from "./locations";
@@ -357,6 +357,7 @@ export async function retailReadiness(q: Db, appId: string, now: Date): Promise<
   }
   if (!data.tenorMonths || data.tenorMonths < 1) e.tenorMonths = "Enter the tenor in months.";
   else if (rules?.maxTenorMonths != null && data.tenorMonths > rules.maxTenorMonths) e.tenorMonths = `The maximum tenor for this product is ${rules.maxTenorMonths} months.`;
+  else if (rules?.minTenorMonths != null && data.tenorMonths < rules.minTenorMonths) e.tenorMonths = `The minimum repayment period for this product is ${rules.minTenorMonths} months.`;
   if (!structure) e.structure = "Choose the financing structure.";
   if (!data.purpose) e.purpose = "Describe the purpose of the financing.";
   const assetProduct = cfg?.config.fulfilmentSteps.some((s) => s !== "POS_DEPLOYMENT") ?? false;
@@ -367,7 +368,9 @@ export async function retailReadiness(q: Db, appId: string, now: Date): Promise<
   }
   if (rules?.assetEligibility.required && rules.assetEligibility.criteria && !data.assetDescription) e.assetDescription = "Describe the asset against the eligibility criteria.";
   if (rules?.equityContribution.applies && data.equityContributionKobo === null) e.equityContributionKobo = "Enter the customer's equity contribution.";
-  if (!data.incomeBasisKobo) e.incomeBasisKobo = "Enter the income or business basis used for DSR.";
+  if (rules?.dsr.denominator && ANNUAL_DENOMINATORS.includes(rules.dsr.denominator)) {
+    if (!data.annualInflowKobo) e.annualInflowKobo = "Enter the verified annual inflow (the average monthly inflow is calculated from it).";
+  } else if (!data.incomeBasisKobo) e.incomeBasisKobo = "Enter the income or business basis used for DSR.";
 
   // --- channel
   let location: LocationRow | null = null;
@@ -477,6 +480,7 @@ function preliminaryInput(applicantType: string, data: RetailData, docs: { categ
     kind: "PRELIMINARY",
     applicantType,
     incomeBasisKobo: data.incomeBasisKobo,
+    annualInflowKobo: data.annualInflowKobo,
     incomeBasisNote: data.incomeBasisNote,
     statementFrom: from,
     statementTo: to,
@@ -840,6 +844,10 @@ export async function retailDispatch(tx: Tx, ctx: Ctx, app: AppRow, task: TaskRo
 
 export interface FinalAssessmentForm {
   incomeBasisKobo: number | null;
+  /** Verified annual inflow (products whose DSR uses average monthly inflow from an annual figure). */
+  annualInflowKobo?: number | null;
+  /** Why the reviewer changed any input from the initiator's preliminary assessment. */
+  adjustmentNote?: string;
   incomeBasisNote: string;
   statementFrom: string | null;
   statementTo: string | null;
@@ -880,6 +888,7 @@ export async function recordFinalAssessment(ctx: Ctx, appId: string, f: FinalAss
       kind: "FINAL",
       applicantType: app.applicant_type,
       incomeBasisKobo: f.incomeBasisKobo,
+      annualInflowKobo: f.annualInflowKobo ?? null,
       incomeBasisNote: f.incomeBasisNote,
       statementFrom: f.statementFrom,
       statementTo: f.statementTo,
@@ -894,8 +903,33 @@ export async function recordFinalAssessment(ctx: Ctx, appId: string, f: FinalAss
       charges: f.charges,
       firstDueDate: null,
     };
+    // Changes from the initiator's preliminary inputs need a reason; each is recorded (previous, revised, who, when).
+    const pre = (await tx.query<{ inputs: AffordabilityInput }>("SELECT inputs FROM retail_assessments WHERE application_id = $1 AND kind = 'PRELIMINARY' ORDER BY created_at DESC LIMIT 1", [app.id])).rows[0]?.inputs;
+    const existingTotal = (o: { monthlyRepaymentKobo: number }[] | undefined) => (o ?? []).reduce((t, x) => t + x.monthlyRepaymentKobo, 0);
+    const changes: { field: string; previous: unknown; revised: unknown }[] = [];
+    if (pre) {
+      const cmp = (field: string, previous: unknown, revised: unknown) => {
+        if ((previous ?? null) !== (revised ?? null)) changes.push({ field, previous: previous ?? null, revised: revised ?? null });
+      };
+      cmp("annual inflow", pre.annualInflowKobo, input.annualInflowKobo);
+      cmp("income basis", pre.incomeBasisKobo, input.incomeBasisKobo);
+      cmp("principal", pre.principalKobo, input.principalKobo);
+      cmp("tenor (months)", pre.tenorMonths, input.tenorMonths);
+      cmp("existing monthly obligations", existingTotal(pre.existingObligations), existingTotal(input.existingObligations));
+    }
+    const note = (f.adjustmentNote ?? "").trim();
+    if (changes.length && note.length < 5) throw invalid("Explain why the assessment inputs changed.", { adjustmentNote: `You changed ${changes.map((c) => c.field).join(", ")} from the preliminary assessment. Give the reason and the evidence relied on.` });
     const r = await storeAssessment(tx, ctx, app, "FINAL", cfg, rules, input, task.assignee_role);
-    return { id: r.id, result: r.out.result, dsr: r.out.dsr?.percent ?? null, blocked: r.out.blockedReasons };
+    if (changes.length)
+      await audit(tx, ctx, {
+        action: "CREDIT_ASSESSMENT_ADJUSTED",
+        actorRole: task.assignee_role,
+        applicationId: app.id,
+        stage: task.stage,
+        reason: note,
+        details: { assessmentId: r.id, changes, evidenceDocumentIds: input.evidenceDocumentIds },
+      });
+    return { id: r.id, result: r.out.result, dsr: r.out.dsr?.percent ?? null, blocked: r.out.blockedReasons, changes };
   });
 }
 

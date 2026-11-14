@@ -81,6 +81,14 @@ DSR = (existing monthly obligations + proposed monthly obligation) ÷ configured
 - **Separate rules:** the principal-to-turnover cap is its own optional rule.
 - **Snapshots:** every assessment stores its rules, inputs, outputs and formula lines. Assessments are immutable (enforced by database trigger).
 
+**Retail affordability policy (business decision, engine `retail-affordability@2`).** For Vendor Financing, Alt Drive and Alt Power:
+- **Average monthly inflow** = verified annual inflow × inflow recognised ÷ 12. The recognition factor is configurable per profile (*Inflow recognised for affordability*, default **100%**); a conservative 70–80% can be set later through a configuration version.
+- **Allowable monthly obligations** = average monthly inflow × the maximum DSR (**30%**). DSR = (existing monthly obligations + proposed instalment) ÷ average monthly inflow.
+- **Minimum repayment period: 12 months** (*Minimum repayment period* per profile). WakeelBoost keeps its 10% limit and its own minimum.
+- These values were added by migration 025 as a **proposed** configuration version for each product; they apply once a Product Config Approver approves them (Administration → Products and rules).
+- **At origination** the initiator enters the verified annual inflow; a live panel shows annual inflow, recognised share, average monthly inflow, existing obligations, requested amount, tenor, pricing, proposed repayment, allowable obligations, DSR, threshold and the outcome (*within approved threshold*, *exceeds approved threshold*, *incomplete assessment*). The saved preliminary assessment (server-side, exact) is the record.
+- **Credit review:** the reviewer's final assessment may change inputs only with a reason; each change (previous value, revised value, reason, reviewer, time, evidence documents) is recorded as `CREDIT_ASSESSMENT_ADJUSTED`, and earlier assessments are kept.
+
 DSR failures block submission and approval. A DSR exception is possible only when the configuration permits it and names the approving role.
 
 ## 4. Documents, photographs, proposals and exceptions

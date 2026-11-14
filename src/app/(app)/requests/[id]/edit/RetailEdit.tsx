@@ -2,7 +2,7 @@ import { db } from "@/server/db";
 import { getCase } from "@/server/domain/views";
 import { CATEGORY_LABEL, RETAIL_UPLOADABLE_BY_STAGE, ASSIGNED_RM_UPLOADS, signDocumentLink } from "@/server/domain/documents";
 import { retailReadiness, PROPOSAL_FIELDS, loadRetailState } from "@/server/domain/retail";
-import { INSURANCE_LABELS, RATE_CONVENTION_LABELS, STRUCTURE_LABELS, PROFILE_LABELS, DSR_DENOMINATOR_LABELS, roleLabel, type CustomerProfile } from "@/server/domain/products";
+import { INSURANCE_LABELS, RATE_CONVENTION_LABELS, STRUCTURE_LABELS, PROFILE_LABELS, DSR_DENOMINATOR_LABELS, ANNUAL_DENOMINATORS, roleLabel, type CustomerProfile } from "@/server/domain/products";
 import { vendorOptions, searchInstitutions } from "@/server/domain/vendors";
 import { listLocations } from "@/server/domain/locations";
 import { maskWithLast4 } from "@/server/mask";
@@ -127,6 +127,10 @@ export async function RetailEdit({ c, staffId, sessionId, mode }: { c: Case; sta
         limits={{
           maxAmountKobo: rules?.maxAmountKobo ?? null,
           maxTenorMonths: rules?.maxTenorMonths ?? null,
+          minTenorMonths: rules?.minTenorMonths ?? null,
+          fromAnnual: !!rules?.dsr.denominator && ANNUAL_DENOMINATORS.includes(rules.dsr.denominator),
+          recognitionPercent: rules?.dsr.inflowRecognitionPercent ?? "100",
+          ratePercent: rules?.structures.find((x) => x.code === app.financing_structure)?.ratePercent ?? rules?.structures[0]?.ratePercent ?? null,
           dsrMax: rules?.dsr.maxPercent ?? null,
           denominator: rules?.dsr.denominator ? DSR_DENOMINATOR_LABELS[rules.dsr.denominator].toLowerCase() : null,
           statementMonths: rules?.statementMonths ?? null,
@@ -165,6 +169,7 @@ export async function RetailEdit({ c, staffId, sessionId, mode }: { c: Case; sta
             assetCostKobo: k2s(data.assetCostKobo),
             equityContributionKobo: k2s(data.equityContributionKobo),
             incomeBasisKobo: k2s(data.incomeBasisKobo),
+            annualInflowKobo: k2s(data.annualInflowKobo),
             proposedMonthlyObligationKobo: k2s(data.proposedMonthlyObligationKobo),
             statedMonthlySalaryKobo: k2s(data.statedMonthlySalaryKobo),
             statedMonthlyTurnoverKobo: k2s(data.statedMonthlyTurnoverKobo),

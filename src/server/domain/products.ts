@@ -59,6 +59,7 @@ export const DSR_DENOMINATORS = [
   "AVERAGE_MONTHLY_BUSINESS_TURNOVER",
   "AVERAGE_MONTHLY_NET_CASH_INFLOW",
   "AVERAGE_MONTHLY_NET_PROFIT",
+  "AVERAGE_MONTHLY_INFLOW_FROM_ANNUAL",
 ] as const;
 export type DsrDenominator = (typeof DSR_DENOMINATORS)[number];
 export const DSR_DENOMINATOR_LABELS: Record<DsrDenominator, string> = {
@@ -67,7 +68,10 @@ export const DSR_DENOMINATOR_LABELS: Record<DsrDenominator, string> = {
   AVERAGE_MONTHLY_BUSINESS_TURNOVER: "Average monthly business turnover (statement credits)",
   AVERAGE_MONTHLY_NET_CASH_INFLOW: "Average monthly net cash inflow",
   AVERAGE_MONTHLY_NET_PROFIT: "Average monthly net profit",
+  AVERAGE_MONTHLY_INFLOW_FROM_ANNUAL: "Average monthly inflow (verified annual inflow ÷ 12)",
 };
+/** Denominators derived from an annual figure entered by the officer (and the recognition factor). */
+export const ANNUAL_DENOMINATORS: readonly DsrDenominator[] = ["AVERAGE_MONTHLY_INFLOW_FROM_ANNUAL"];
 
 export const DOC_STAGES = ["SUBMISSION", "CREDIT", "OFFER", "PRE_DISBURSEMENT"] as const;
 export type DocStage = (typeof DOC_STAGES)[number];
@@ -120,10 +124,14 @@ export const profileRulesSchema = z.object({
   eligibilityNote: z.string().max(300).nullable().default(null),
   maxAmountKobo: kobo.nullable(),
   maxTenorMonths: z.number().int().min(1).max(360).nullable(),
+  /** Minimum repayment period. Null = no minimum. */
+  minTenorMonths: z.number().int().min(1).max(360).nullable().default(null),
   structures: z.array(structureSchema),
   dsr: z.object({
     maxPercent: pct.nullable(),
     denominator: z.enum(DSR_DENOMINATORS).nullable(),
+    /** Share of verified inflow recognised for affordability (conservative assessment). 100 = all of it. */
+    inflowRecognitionPercent: pct.default("100"),
     exceptionAllowed: z.boolean().default(false),
     exceptionApproverRole: roleRef.nullable().default(null),
   }),
@@ -341,6 +349,7 @@ export function configGaps(cfg: ProductConfig, opts: { profile?: CustomerProfile
     const g = (key: string, label: string, blocks: BlockedAction, structure?: StructureCode) => gaps.push({ key: `profiles.${p}.${key}`, label: `${PROFILE_LABELS[p]}: ${label}`, blocks, profile: p, structure });
     if (r.maxAmountKobo === null) g("maxAmountKobo", "maximum financing amount", "SUBMISSION");
     if (r.maxTenorMonths === null) g("maxTenorMonths", "maximum tenor", "SUBMISSION");
+    if (r.minTenorMonths !== null && r.maxTenorMonths !== null && r.minTenorMonths > r.maxTenorMonths) g("minTenorMonths", `minimum tenor (${r.minTenorMonths}) above the maximum (${r.maxTenorMonths})`, "SUBMISSION");
     if (r.dsr.maxPercent === null) g("dsr.maxPercent", "maximum DSR", "SUBMISSION");
     if (r.dsr.denominator === null) g("dsr.denominator", "DSR income / business denominator", "SUBMISSION");
     if (r.dsr.exceptionAllowed && !r.dsr.exceptionApproverRole) g("dsr.exceptionApproverRole", "DSR exception approver role", "DSR_EXCEPTION");

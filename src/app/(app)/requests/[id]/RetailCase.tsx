@@ -7,7 +7,7 @@ import type { getCase } from "@/server/domain/views";
 import { CATEGORY_LABEL, PACK } from "@/server/domain/documents";
 import { STAGE_LABELS, type Stage } from "@/server/domain/stages";
 import { ROLE_LABELS, type Role } from "@/server/domain/roles";
-import { configById, configGaps, effectiveConfig, gapsBlocking, profileRules, structureRules, PROFILE_LABELS, STRUCTURE_LABELS, INSURANCE_LABELS, DSR_DENOMINATOR_LABELS, FULFILMENT_LABELS, roleLabel, type CustomerProfile, type StructureCode, type FulfilmentKind } from "@/server/domain/products";
+import { configById, configGaps, effectiveConfig, gapsBlocking, profileRules, structureRules, PROFILE_LABELS, STRUCTURE_LABELS, INSURANCE_LABELS, DSR_DENOMINATOR_LABELS, ANNUAL_DENOMINATORS, FULFILMENT_LABELS, roleLabel, type CustomerProfile, type StructureCode, type FulfilmentKind } from "@/server/domain/products";
 import { retailDataSchema } from "@/server/domain/retail-data";
 import { PROPOSAL_FIELDS, preliminaryOk } from "@/server/domain/retail";
 import { retailTemplate } from "@/server/domain/retail-offer";
@@ -356,6 +356,9 @@ export async function RetailActionPanel({ c, task, doneHref }: { c: Case; task: 
               applicationId={app.id}
               defaults={{
                 incomeBasis: k2s(inputs?.incomeBasisKobo ?? b.data.incomeBasisKobo),
+                annualInflow: k2s(inputs?.annualInflowKobo ?? b.data.annualInflowKobo),
+                fromAnnual: !!rules?.dsr.denominator && ANNUAL_DENOMINATORS.includes(rules.dsr.denominator),
+                recognitionPercent: rules?.dsr.inflowRecognitionPercent,
                 principal: k2s(inputs?.principalKobo ?? b.data.requestedAmountKobo),
                 tenor: String(inputs?.tenorMonths ?? b.data.tenorMonths ?? ""),
                 statementFrom: inputs?.statementFrom ?? "",
