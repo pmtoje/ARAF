@@ -2,6 +2,15 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { Client } from "pg";
 
+/**
+ * Files renamed after some databases had already recorded the old name.
+ * Key: current file name, value: name an older database may have applied.
+ * The content is unchanged, so the rename must not re-run it.
+ */
+const RENAMED_MIGRATIONS: Record<string, string> = {
+  "053_crm_complaints.sql": "052_crm_complaints.sql",
+};
+
 /** Apply SQL migrations in /migrations in lexical order, each in its own transaction. */
 export async function migrate(databaseUrl: string, opts: { reset?: boolean; log?: boolean } = {}) {
   const client = new Client({ connectionString: databaseUrl });
@@ -16,6 +25,12 @@ export async function migrate(databaseUrl: string, opts: { reset?: boolean; log?
     const done = new Set((await client.query<{ name: string }>("SELECT name FROM schema_migrations")).rows.map((r) => r.name));
     for (const f of files) {
       if (done.has(f)) continue;
+      const previous = RENAMED_MIGRATIONS[f];
+      if (previous && done.has(previous)) {
+        await client.query("INSERT INTO schema_migrations (name) VALUES ($1) ON CONFLICT DO NOTHING", [f]);
+        if (opts.log) console.log(`adopted ${f} (already applied as ${previous})`);
+        continue;
+      }
       await client.query("BEGIN");
       try {
         await client.query(readFileSync(path.join(dir, f), "utf8"));

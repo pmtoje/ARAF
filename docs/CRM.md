@@ -63,7 +63,7 @@ Existing tickets keep the category and issue names, team, priority and deadlines
 - **Inputs and exports:** all inputs are validated with parameterised SQL; React escapes all output; CSV exports are protected against formula injection.
 - **Abuse limits:** ticket creation is limited to 30 per person per hour.
 
-## Database (migration 052)
+## Database (migration 053)
 - `crm_categories`, `crm_subcategories` (with the product each issue applies to), `crm_areas`
 - `crm_teams`, `crm_team_members`, `crm_settings`
 - `crm_routing_rules`, `crm_sla_policies`, `crm_escalation_rules`

@@ -73,7 +73,7 @@ describe("CRM registration, routing and lifecycle", () => {
     expect(b).toEqual({ ...a, created: false });
     // Concurrent submissions get distinct references.
     const bola = await at("rm.bola@altbank.ng", T0);
-    const many = await Promise.all(Array.from({ length: 6 }, (_, n) => createTicket(bola, { idempotencyKey: randomUUID(), productCode: "PLATFORM", ...i, subject: `Parallel ${n} complaint`, description: `Raised at the same time, number ${n}.` }, ).catch((e) => e)));
+    const many = await Promise.all(Array.from({ length: 6 }, (_, n) => createTicket(bola, { idempotencyKey: randomUUID(), productCode: "PLATFORM", ...i, subject: `Parallel ${n} complaint`, description: `Raised at the same time, number ${n}.`, confirmDuplicate: true }).catch((e) => e)));
     expect(new Set(many.map((m) => m.ref)).size).toBe(6);
   });
 
