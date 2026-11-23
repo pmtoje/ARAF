@@ -51,7 +51,8 @@ export interface ActionProps {
   isAssignee: boolean;
   canManage: boolean;
   canWork: boolean;
-  isCxHead: boolean;
+  /** CX Head or Super Admin: may reroute, comment, request action and close. */
+  isOversight: boolean;
   isMember: boolean;
   officers: { id: string; name: string; role: string }[];
   teams: { id: string; name: string }[];
@@ -163,7 +164,7 @@ export function TicketActions(p: ActionProps) {
               <textarea id="tr-why" name="reason" rows={2} required minLength={10} />
             </div>
             <div>
-              <SubmitButton>{p.isCxHead && !p.isMember ? "Override routing" : "Transfer"}</SubmitButton>
+              <SubmitButton>{p.isOversight && !p.isMember ? "Override routing" : "Transfer"}</SubmitButton>
             </div>
           </Op>
         </Fold>
@@ -224,7 +225,7 @@ export function TicketActions(p: ActionProps) {
       </div>,
     );
 
-  if ((p.isCreator || p.isCxHead) && ["RESOLVED", "CLOSED"].includes(p.status))
+  if ((p.isCreator || p.isOversight) && ["RESOLVED", "CLOSED"].includes(p.status))
     blocks.push(
       <Fold key="reopen" label="The issue persists: reopen" danger>
         <Op op="reopen" id={p.id}>
@@ -239,7 +240,7 @@ export function TicketActions(p: ActionProps) {
       </Fold>,
     );
 
-  if (p.isCxHead) {
+  if (p.isOversight) {
     blocks.push(
       <Fold key="act" label="Request action from the team">
         <Op op="action" id={p.id}>
@@ -253,12 +254,12 @@ export function TicketActions(p: ActionProps) {
         </Op>
       </Fold>,
     );
-    if (p.status === "RESOLVED")
+    if (p.status !== "CLOSED")
       blocks.push(
-        <Fold key="cxclose" label="Close (CX Head)">
+        <Fold key="cxclose" label="Close ticket">
           <Op op="cxclose" id={p.id}>
             <div className="field">
-              <label htmlFor="cc-why">Reason</label>
+              <label htmlFor="cc-why">Reason for closing (required)</label>
               <textarea id="cc-why" name="reason" rows={2} required minLength={10} />
             </div>
             <div>
@@ -269,7 +270,7 @@ export function TicketActions(p: ActionProps) {
       );
   }
 
-  if (p.canManage || p.isCxHead)
+  if (p.canManage || p.isOversight)
     blocks.push(
       <Fold key="link" label="Link a related ticket">
         <Op op="link" id={p.id}>
