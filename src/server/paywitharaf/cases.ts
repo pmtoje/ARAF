@@ -29,6 +29,7 @@ export interface PwaCase {
   idempotency_key: string;
   pwa_reference: string;
   partner_code: string;
+  partner_name: string | null;
   merchant_order_ref: string;
   customer_name: string;
   bvn_last4: string | null;
@@ -184,7 +185,7 @@ export async function actOnCase(ctx: Ctx, input: { caseId: string; action: PwaAc
   });
 }
 
-export interface PwaListRow extends Pick<PwaCase, "id" | "ref" | "pwa_reference" | "partner_code" | "customer_name" | "financing_kobo" | "tenor_months" | "stage" | "execution_status" | "received_at" | "updated_at"> {
+export interface PwaListRow extends Pick<PwaCase, "id" | "ref" | "pwa_reference" | "partner_code" | "partner_name" | "customer_name" | "financing_kobo" | "tenor_months" | "stage" | "execution_status" | "received_at" | "updated_at"> {
   callbacks_dead: number;
 }
 
@@ -192,7 +193,7 @@ export async function listCases(q: Db, opts: { stage?: string | null } = {}): Pr
   const stage = opts.stage && (PWA_STAGES as readonly string[]).includes(opts.stage) ? opts.stage : null;
   return (
     await q.query<PwaListRow>(
-      `SELECT c.id, c.ref, c.pwa_reference, c.partner_code, c.customer_name, c.financing_kobo, c.tenor_months, c.stage, c.execution_status,
+      `SELECT c.id, c.ref, c.pwa_reference, c.partner_code, c.partner_name, c.customer_name, c.financing_kobo, c.tenor_months, c.stage, c.execution_status,
               c.received_at, c.updated_at,
               (SELECT count(*)::int FROM pwa_callback_outbox o WHERE o.case_id = c.id AND o.status = 'DEAD') AS callbacks_dead
          FROM pwa_cases c

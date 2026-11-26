@@ -23,12 +23,12 @@ export default async function PayWithArafQueue({ searchParams }: { searchParams:
         title="Checkout financing applications"
         intro="Applications sent by Pay with ARAF from merchant checkouts. SeedFi and Periculum checks and affordability were run before submission; review, ask the customer for information, recommend and approve here. Decisions go back to Pay with ARAF automatically."
       />
-      <nav className="row" aria-label="Filter by stage" style={{ flexWrap: "wrap", gap: "var(--space-2)", marginBottom: "var(--space-4)" }}>
-        <Link className={`btn btn-sm ${!sp.stage ? "btn-dark" : "btn-ghost"}`} href="/pay-with-araf">
-          All open first
+      <nav className="tabs" aria-label="Filter by stage">
+        <Link className="tab" href="/pay-with-araf" aria-current={!sp.stage ? "page" : undefined}>
+          All (open first)
         </Link>
         {PWA_STAGES.map((st) => (
-          <Link key={st} className={`btn btn-sm ${sp.stage === st ? "btn-dark" : "btn-ghost"}`} href={`/pay-with-araf?stage=${st}`}>
+          <Link key={st} className="tab" href={`/pay-with-araf?stage=${st}`} aria-current={sp.stage === st ? "page" : undefined}>
             {PWA_STAGE_LABELS[st]}
           </Link>
         ))}
@@ -63,7 +63,7 @@ export default async function PayWithArafQueue({ searchParams }: { searchParams:
                     <div className="muted small">{r.pwa_reference}</div>
                   </td>
                   <td>{r.customer_name}</td>
-                  <td>{r.partner_code}</td>
+                  <td>{r.partner_name ?? r.partner_code}</td>
                   <td className="num">{formatNaira(r.financing_kobo)}</td>
                   <td>{r.tenor_months ? `${r.tenor_months} months` : "—"}</td>
                   <td>

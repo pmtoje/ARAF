@@ -10,6 +10,7 @@ CREATE TABLE pwa_cases (
   idempotency_key     text NOT NULL UNIQUE,
   pwa_reference       text NOT NULL,                     -- Pay with ARAF application reference
   partner_code        text NOT NULL,
+  partner_name        text,
   merchant_order_ref  text NOT NULL,
   customer_name       text NOT NULL,
   bvn_last4           text,

@@ -22,6 +22,7 @@ export const submissionSchema = z
   .object({
     application_reference: z.string().min(3).max(80),
     partner_id: z.string().min(1).max(80),
+    partner_name: z.string().max(200).optional(),
     merchant_order_reference: z.string().min(1).max(120),
     customer: z.object({ first_name: z.string().max(120), last_name: z.string().max(120), verified_bvn: z.string().max(40).optional(), income_profile: z.string().max(40).nullable().optional() }).passthrough(),
     financing: z
@@ -118,15 +119,16 @@ export async function receiveApplication(ctx: Ctx, rawBody: string, idempotencyK
     const monthly = f.schedule?.[0]?.amount_kobo ?? null;
     const c = await one<PwaCase>(
       tx,
-      `INSERT INTO pwa_cases (ref, idempotency_key, pwa_reference, partner_code, merchant_order_ref, customer_name, bvn_last4, income_profile,
+      `INSERT INTO pwa_cases (ref, idempotency_key, pwa_reference, partner_code, partner_name, merchant_order_ref, customer_name, bvn_last4, income_profile,
          purchase_kobo, equity_kobo, financing_kobo, deferred_sale_kobo, monthly_kobo, tenor_months, annual_rate_bps, payload_enc, stage,
          received_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'RECEIVED',$17,$17) RETURNING *`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'RECEIVED',$18,$18) RETURNING *`,
       [
         ref,
         idempotencyKey,
         s.application_reference,
         s.partner_id,
+        s.partner_name ?? null,
         s.merchant_order_reference,
         `${s.customer.first_name} ${s.customer.last_name}`.trim().slice(0, 240),
         bvnLast4,
@@ -151,7 +153,7 @@ export async function receiveApplication(ctx: Ctx, rawBody: string, idempotencyK
     await notifyRoleHolders(tx, ctx.now, PWA_OPERATOR_ROLES, {
       kind: "PWA_RECEIVED",
       title: `Pay with ARAF application ${ref}`,
-      body: `${c.customer_name} — ${s.partner_id} order ${s.merchant_order_reference} is waiting for business evaluation.`,
+      body: `${c.customer_name} — ${s.partner_name ?? s.partner_id} order ${s.merchant_order_reference} is waiting for business evaluation.`,
       link: `/pay-with-araf/${c.id}`,
       dedupeKey: `pwa-received:${c.id}`,
     });

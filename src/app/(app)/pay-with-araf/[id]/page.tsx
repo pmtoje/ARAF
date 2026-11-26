@@ -19,19 +19,26 @@ const PLACEHOLDERS: Partial<Record<PwaAction, string>> = {
 
 type Obj = Record<string, unknown>;
 const o = (v: unknown): Obj => (v && typeof v === "object" ? (v as Obj) : {});
-const txt = (v: unknown) => (v === null || v === undefined || v === "" ? "—" : String(v));
+// Pay with ARAF's sandbox redacts some fields before sending; show that plainly.
+const txt = (v: unknown) => (v === null || v === undefined || v === "" ? "—" : String(v).startsWith("[REDACTED") ? "Withheld (sandbox data)" : String(v));
+const RULES: Record<string, string> = {
+  TOTAL_OBLIGATIONS_MAX_33_3PCT_OF_MONTHLY_SALARY: "All repayments ≤ 33.3% of monthly salary",
+  TOTAL_OBLIGATIONS_MAX_10PCT_OF_MONTHLY_TURNOVER: "All repayments ≤ 10% of monthly turnover",
+};
 const pct = (bps: unknown) => (typeof bps === "number" ? `${(bps / 100).toFixed(2)}% per annum` : "—");
 
 function Facts({ rows }: { rows: [string, string][] }) {
   return (
-    <dl className="facts">
-      {rows.map(([k, v]) => (
-        <div key={k}>
-          <dt>{k}</dt>
-          <dd>{v}</dd>
-        </div>
-      ))}
-    </dl>
+    <table className="kv">
+      <tbody>
+        {rows.map(([k, v]) => (
+          <tr key={k}>
+            <th>{k}</th>
+            <td>{v}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
@@ -50,7 +57,7 @@ export default async function PayWithArafCase({ params }: { params: Promise<{ id
   const dead = callbacks.filter((x) => x.status === "DEAD").length;
   return (
     <>
-      <PageHeader eyebrow="Pay with ARAF" crumbs={[{ href: "/pay-with-araf", label: "Checkout applications" }, { label: c.ref }]} title={`${c.ref} · ${c.customer_name}`} intro={`${PWA_STAGE_LABELS[c.stage as PwaStage]} — ${c.partner_code} order ${c.merchant_order_ref} (Pay with ARAF ${c.pwa_reference})`} />
+      <PageHeader eyebrow="Pay with ARAF" crumbs={[{ href: "/pay-with-araf", label: "Checkout applications" }, { label: c.ref }]} title={`${c.ref} · ${c.customer_name}`} intro={`${PWA_STAGE_LABELS[c.stage as PwaStage]} — ${c.partner_name ?? c.partner_code} order ${c.merchant_order_ref} (Pay with ARAF ${c.pwa_reference})`} />
       <div className="grid-2">
         <section className="card">
           <h2>Financing</h2>
@@ -71,11 +78,12 @@ export default async function PayWithArafCase({ params }: { params: Promise<{ id
           <Facts
             rows={[
               ["Customer", c.customer_name],
+              ["Merchant", `${c.partner_name ?? c.partner_code} · order ${c.merchant_order_ref}`],
               ["BVN", txt(cust.verified_bvn)],
               ["Income profile", txt(c.income_profile)],
               ["SeedFi", seed.reference ? `${txt(seed.band)} band · obligations ${formatNaira(seed.bureau_monthly_obligations_kobo as string)} / month` : "Not provided"],
               ["Periculum", peri.reference ? `Average inflow ${formatNaira(peri.average_inflow_kobo as string)} · ${txt(peri.statement_quality)}` : "Not provided"],
-              ["Affordability rule", txt(aff.repayment_ceiling).replaceAll("_", " ").toLowerCase()],
+              ["Affordability rule", RULES[String(aff.repayment_ceiling)] ?? txt(aff.repayment_ceiling)],
               ["Repayment capacity", formatNaira(aff.capacity_kobo as string)],
             ]}
           />
