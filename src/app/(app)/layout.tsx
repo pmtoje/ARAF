@@ -14,6 +14,7 @@ import { signOutAction, switchWorkspaceAction } from "./shell-actions";
 import { retailScope as retailScopeFor } from "@/server/retail-reports";
 import { viewsFor, staffActionCount } from "@/server/staff/views";
 import { altphonesAccess, reviewQueueCount } from "@/server/altphones/views";
+import { PWA_VIEW_ROLES } from "@/server/paywitharaf/roles";
 import { portfolioAccess } from "@/server/altphones/portfolio";
 import { migrationAccess } from "@/server/altphones/migration";
 import { locationAccess } from "@/server/altphones/location-master";
@@ -73,6 +74,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const showPerformance = roles.includes("RM") || roles.includes("TEAM_LEAD") || perfTargets.propose || perfTargets.approve;
   const showTracker = isAdmin || (retailScope?.kind === "ALL" && (await isEnabled(db, "REPAYMENT_TRACKER")));
   const unread = await unreadCount(db, session.staffId);
+  // Pay with ARAF (embedded checkout financing): only once the integration is switched on; never takes the app down.
+  const pwaView = config.payWithAraf.enabled && roles.some((r) => PWA_VIEW_ROLES.includes(r));
+  const pwaOpen = pwaView
+    ? await db.query("SELECT count(*) AS n FROM pwa_cases WHERE stage IN ('RECEIVED','BUSINESS_EVALUATION','CREDIT_REVIEW','APPROVAL')").then((r) => Number(r.rows[0].n)).catch(() => 0)
+    : 0;
   const godsEye = await executiveAccess(db, session.staffId);
   const icOfficer = roles.includes("INVOICE_CONFIRMATION_OFFICER");
   const isDh = roles.includes("DIVISIONAL_HEAD");
@@ -239,6 +245,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 Product configuration
               </NavLink>
             )}
+          </div>
+        )}
+        {pwaView && (
+          <div className="nav-section">
+            <span className="nav-title">Pay with ARAF</span>
+            <NavLink href="/pay-with-araf" count={pwaOpen} icon={<ClipboardCheck {...ic} />}>
+              Checkout applications
+            </NavLink>
           </div>
         )}
         {(alt.any || altMigration || altLocations || altPortfolio) && (

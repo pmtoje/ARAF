@@ -9,6 +9,7 @@ import { config } from "../config";
 import { objectStore } from "../storage";
 import { scanDocument } from "../domain/documents";
 import { processOutbox } from "./outbox";
+import { processPwaCallbacks } from "../paywitharaf/callbacks";
 import { runMonthlyReport, runWeeklyDigest } from "./schedules";
 import { runDhWeeklyReport } from "./dh-weekly";
 import { runSlaEscalations } from "../domain/sla";
@@ -51,6 +52,8 @@ export async function retentionSweep(now = new Date()) {
 export async function workerTick(now = new Date()) {
   const results: Record<string, unknown> = {};
   results.outbox = await processOutbox(now);
+  // Pay with ARAF: signed decision callbacks (no-op unless PAY_WITH_ARAF_ENABLED).
+  results.payWithArafCallbacks = await processPwaCallbacks(now);
   results.weekly = await runWeeklyDigest(now);
   results.monthly = await runMonthlyReport(now);
   results.dhWeekly = await runDhWeeklyReport(now);

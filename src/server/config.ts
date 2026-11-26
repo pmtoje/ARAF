@@ -192,6 +192,24 @@ export const config = {
       timeoutMs: int("PAYSTACK_TIMEOUT_MS", 15000),
     };
   },
+  /**
+   * Pay with ARAF (embedded-checkout financing, a separate application). Disabled unless
+   * PAY_WITH_ARAF_ENABLED=true and the shared secret is set. The secret signs both directions.
+   */
+  get payWithAraf() {
+    return {
+      enabled: bool("PAY_WITH_ARAF_ENABLED", false),
+      secret: str("PAY_WITH_ARAF_SECRET", ""),
+      /** Pay with ARAF's callback endpoint, e.g. https://api.araf.ng/api/callbacks/araf */
+      callbackUrl: str("PAY_WITH_ARAF_CALLBACK_URL", "").trim(),
+      /** Exact redirect URIs allowed for staff sign-in (comma-separated). */
+      ssoRedirectUris: str("PAY_WITH_ARAF_SSO_REDIRECT_URIS", "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
+      timeoutMs: int("PAY_WITH_ARAF_TIMEOUT_MS", 12000),
+    };
+  },
   get altphonesOtpTtlSeconds() {
     return int("ALTPHONES_OTP_TTL_SECONDS", 600);
   },
