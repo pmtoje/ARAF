@@ -1177,3 +1177,8 @@ dl.kv dd { margin: 0; overflow-wrap: anywhere; }
 .po-tip { transform: none; }
 .po-tip-right { margin-left: 12px; }
 .po-tip-left { transform: translateX(calc(-100% - 12px)); }
+
+/* Chart series (categorical slots 1-2, validated for colour-vision deficiency in both modes). */
+:root { --series-1: #257de0; --series-2: #f47230; }
+:root[data-theme="dark"] { --series-1: #338ced; --series-2: #e76624; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --series-1: #338ced; --series-2: #e76624; } }

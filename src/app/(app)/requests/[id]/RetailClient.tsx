@@ -202,7 +202,7 @@ export function FinalAssessmentForm({
       {departed.length > 0 && (
         <div className="field">
           <label htmlFor="fa-dep">Reason for changing the verified {departed.join(" and ")}</label>
-          <input id="fa-dep" value={departReason} onChange={(e) => setDepartReason(e.target.value)} required minLength={10} placeholder="Name the evidence relied on instead of the statement analysis" />
+          <input id="fa-dep" name="verifiedChangeReason" value={departReason} onChange={(e) => setDepartReason(e.target.value)} required minLength={10} placeholder="Name the evidence relied on instead of the statement analysis" />
         </div>
       )}
       <div className="field">

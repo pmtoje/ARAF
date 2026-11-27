@@ -153,6 +153,7 @@ export async function RetailEdit({ c, staffId, sessionId, mode }: { c: Case; sta
         beneficiaryRequired={!!readiness.config?.config.beneficiaryRequired}
         data={{
           text: {
+            daoCode: data.daoCode,
             customerName: data.customerName,
             businessName: data.businessName,
             companyName: data.companyName,

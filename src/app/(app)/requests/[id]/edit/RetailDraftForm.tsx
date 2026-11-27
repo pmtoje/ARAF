@@ -57,7 +57,7 @@ export interface RetailFormProps {
 }
 
 const SECTIONS = [
-  { id: "customer", label: "Customer", keys: ["customerName", "businessName", "companyName", "registrationNumber", "phone", "email", "businessAddress", "bvn", "tin", "directors", "applicantType"] },
+  { id: "customer", label: "Customer", keys: ["daoCode", "customerName", "businessName", "companyName", "registrationNumber", "phone", "email", "businessAddress", "bvn", "tin", "directors", "applicantType"] },
   { id: "work", label: "Employment or business", keys: ["employerName", "statedMonthlySalaryKobo", "salaryHistory", "businessSector", "statedMonthlyTurnoverKobo"] },
   { id: "facility", label: "Facility", keys: ["requestedAmountKobo", "tenorMonths", "structure", "purpose", "assetDescription", "assetCostKobo", "deliveryAddress", "equityContributionKobo"] },
   { id: "affordability", label: "Obligations and DSR", keys: ["incomeBasisKobo", "annualInflowKobo", "proposedMonthlyObligationKobo", "obligations"] },
@@ -191,6 +191,7 @@ export function RetailDraftForm(props: RetailFormProps) {
 
   const payload = JSON.stringify({
     data: {
+      daoCode: t.daoCode,
       customerName: t.customerName,
       businessName: t.businessName,
       companyName: t.companyName,
@@ -275,6 +276,9 @@ export function RetailDraftForm(props: RetailFormProps) {
           <p className="small muted">{props.productName} · {props.profileLabel} · {T === "LIMITED" ? "Limited company" : T === "ENTERPRISE" ? "Enterprise" : "Individual"}</p>
           {fe("applicantType") && <p className="err">{fe("applicantType")}</p>}
           <div className="grid-2">
+            <Field id="daoCode" label="DAO code" required error={fe("daoCode")}>
+              <input id="daoCode" value={t.daoCode ?? ""} onChange={set("daoCode")} aria-invalid={!!fe("daoCode")} autoComplete="off" maxLength={30} style={{ textTransform: "uppercase" }} />
+            </Field>
             {T === "LIMITED" ? (
               <Field id="companyName" label="Company name" required error={fe("companyName")}>
                 <input id="companyName" value={t.companyName} onChange={set("companyName")} aria-invalid={!!fe("companyName")} />

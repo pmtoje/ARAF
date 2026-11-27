@@ -28,7 +28,7 @@ describe("Weekly Performance Briefing (personal)", () => {
 
   it("disbursements are the dominant figure; drafts and approvals are never counted as disbursements; sent once per week", async () => {
     await enableBriefing();
-    await createDraft(await ctxFor("rm.ade@altbank.ng", NOW), { initiatorRole: "RM", applicantType: "INDIVIDUAL" });
+    await createDraft(await ctxFor("rm.ade@altbank.ng", NOW), { daoCode: "DAO-1001", initiatorRole: "RM", applicantType: "INDIVIDUAL" });
     const disbursed = await createSubmittedCase({ initiator: "RM", amountKobo: N(1_000_000), now: NOW });
     await driveToOffer(disbursed, NOW);
     await driveToClosed(disbursed, NOW);

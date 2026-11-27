@@ -278,7 +278,7 @@ export default async function CasePage({ params, searchParams }: { params: Promi
           {tab === "overview" && (retail ? <RetailOverview c={c} /> : <Overview c={c} data={data} />)}
           {tab === "documents" && <Documents c={c} link={link} tabHref={tabHref} previewId={previewDoc?.id ?? null} myTask={myTask} isInitiator={isInitiator} />}
           {tab === "assessment" && (retail ? <RetailAssessmentTab c={c} /> : <Assessment c={c} />)}
-          {tab === "intelligence" && <FinancialIntelligenceTab c={c} s={fi} />}
+          {tab === "intelligence" && <FinancialIntelligenceTab c={c} s={fi} link={link} />}
           {tab === "activity" && (
             <>
               <History c={c} />

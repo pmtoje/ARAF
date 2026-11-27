@@ -32,7 +32,7 @@ import { getStatement, getTransactions, periculumReadiness, periculumSource, sub
 export const CREDIT_ANALYSIS_STAGES = ["FIRST_CREDIT_REVIEW", "CREDIT_CORRECTION", "CX_CREDIT_REVIEW"] as const;
 
 /** Roles that see the full analysis (accounts, transactions, income figures). Others on the request see the summary only. */
-export const CREDIT_DETAIL_ROLES: readonly string[] = ["CREDIT_OFFICER_1", "CREDIT_OFFICER_2", "CREDIT_OFFICER_3", "CREDIT_LEAD_1", "CREDIT_LEAD_2", "CX_CREDIT_REVIEWER", "UNIT_HEAD", "DIVISIONAL_HEAD", "HEAD_OF_UNIT", "SUPER_ADMIN"];
+export const CREDIT_DETAIL_ROLES: readonly string[] = ["CREDIT_OFFICER_1", "CREDIT_OFFICER_2", "CREDIT_OFFICER_3", "CREDIT_LEAD_1", "CREDIT_LEAD_2", "CX_CREDIT_REVIEWER", "UNIT_HEAD", "DIVISIONAL_HEAD", "HEAD_OF_UNIT", "DISBURSEMENT_OFFICER_1", "DISBURSEMENT_OFFICER_2", "SUPER_ADMIN"];
 
 export type AnalysisStatus = "QUEUED" | "PROCESSING" | "PARTIALLY_COMPLETED" | "COMPLETED" | "FAILED" | "REQUIRES_VERIFICATION" | "SUPERSEDED";
 export type StatementStatus = "PENDING" | "SUBMITTING" | "SUBMISSION_UNCERTAIN" | "UPLOADED" | "PROCESSING" | "PROCESSED" | "FAILED" | "REQUIRES_VERIFICATION" | "DUPLICATE" | "REUSED";
@@ -294,7 +294,41 @@ async function rollUp(tx: Tx, analysisId: string, now: Date): Promise<AnalysisSt
     // Financial intelligence (Phase 3): built from the stored results and saved on the analysis.
     await storeIntelligence(tx, analysisId, now);
     // Credit recommendation (Phase 4): the approved affordability engine on the verified figures; decision support only.
-    await storeRecommendation(tx, analysisId, now);
+    const rec = await storeRecommendation(tx, analysisId, now);
+    // Credit Risk Report signals (Periculum risk fields + ARAF figures), saved with the analysis.
+    const risk = await (await import("./fi-risk")).storeRisk(tx, analysisId);
+    // Facility timeline: consolidated assessment, DSR / recommendation and material exceptions.
+    const fiNow = (
+      await tx.query<{ result: { intelligence?: { exceptions: { severity: string; type: string }[]; statementsAnalysed: number; assessmentMonths: string[] } } | null }>(
+        "SELECT result FROM fi_analyses WHERE id = $1",
+        [analysisId],
+      )
+    ).rows[0]?.result?.intelligence;
+    const base = { analysisId, analysisVersion: a.version, source: a.source };
+    if (fiNow)
+      await audit(tx, ctx, {
+        action: "FINANCIAL_ASSESSMENT_COMPLETED",
+        actorRole: "SYSTEM",
+        applicationId: a.application_id,
+        details: { ...base, outcome: next, statements: fiNow.statementsAnalysed, months: fiNow.assessmentMonths.length },
+      });
+    if (rec)
+      await audit(tx, ctx, {
+        action: "CREDIT_RECOMMENDATION_GENERATED",
+        actorRole: "SYSTEM",
+        applicationId: a.application_id,
+        details: { ...base, outcome: rec.outcomeLabel, dsrPercent: rec.dsr.percent, thresholdPercent: rec.dsr.thresholdPercent, recommendedPrincipalKobo: rec.recommendedPrincipalKobo, riskGrade: risk?.gradeLabel ?? null },
+      });
+    const material = (fiNow?.exceptions ?? []).filter((e) => e.severity !== "INFO");
+    if (material.length)
+      await audit(tx, ctx, {
+        action: "MATERIAL_EXCEPTION_IDENTIFIED",
+        actorRole: "SYSTEM",
+        applicationId: a.application_id,
+        details: { ...base, count: material.length, types: [...new Set(material.map((e) => e.type))] },
+      });
+    // The report is saved with the analysis: no separate save action and no manual upload.
+    if (counts.processed > 0) await (await import("./fi-report")).saveFinancialReport(tx, ctx, analysisId);
     const ref = (await tx.query<{ ref: string }>("SELECT ref FROM applications WHERE id = $1", [a.application_id])).rows[0]?.ref ?? "";
     const words: Record<string, string> = {
       COMPLETED: `All ${counts.total} statement(s) were analysed.`,
@@ -340,6 +374,17 @@ async function update(s: StatementRow, now: Date, set: Partial<Record<string, un
   await withTx(async (tx) => {
     const cols = Object.keys(set);
     await tx.query(`UPDATE fi_statements SET ${cols.map((c, i) => `${c} = $${i + 2}`).join(", ")}, updated_at = $${cols.length + 2} WHERE id = $1`, [s.id, ...cols.map((c) => set[c]), now]);
+    // Facility timeline: each statement's own outcome (the consolidated result follows in rollUp).
+    const st = typeof set.status === "string" ? set.status : null;
+    if (st && st !== s.status && ["PROCESSED", "FAILED", "REQUIRES_VERIFICATION"].includes(st)) {
+      const a = (await tx.query<{ application_id: string; version: number }>("SELECT application_id, version FROM fi_analyses WHERE id = $1", [s.analysis_id])).rows[0];
+      await audit(tx, systemCtx(now), {
+        action: st === "PROCESSED" ? "STATEMENT_PROCESSED" : "STATEMENT_PROCESSING_FAILED",
+        actorRole: "SYSTEM",
+        applicationId: a.application_id,
+        details: { analysisId: s.analysis_id, analysisVersion: a.version, file: s.filename, outcome: st, category: set.error_category ?? null },
+      });
+    }
     await rollUp(tx, s.analysis_id, now);
   });
 }

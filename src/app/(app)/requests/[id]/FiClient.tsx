@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { AmountInput } from "@/components/inputs";
 import { retryAnalysisAction, startAnalysisAction, whatIfAction } from "./fi-actions";
+import { requestExceptionAction } from "../retail-actions";
 import type { Recommendation } from "@/server/domain/credit-recommendation";
 
 const naira = (k: number | null | undefined) =>
@@ -128,6 +129,37 @@ export function WhatIf({ analysisId, principal, tenor }: { analysisId: string; p
           </>
         );
       }}
+    </ActionForm>
+  );
+}
+
+/** Request a Manual Financial Assessment exception (existing exception process; decided by the configured authority). */
+export function ManualAssessmentRequest({ applicationId, evidence }: { applicationId: string; evidence: Doc[] }) {
+  return (
+    <ActionForm action={requestExceptionAction} resetOnSuccess>
+      <input type="hidden" name="applicationId" value={applicationId} />
+      <input type="hidden" name="type" value="MANUAL_ASSESSMENT" />
+      <div className="field">
+        <label htmlFor="ma-reason">Why the automated assessment cannot be used</label>
+        <textarea id="ma-reason" name="reason" required minLength={10} rows={3} placeholder="e.g. Periculum has been unavailable since 09:00; incident reference …" />
+      </div>
+      <fieldset className="subfield">
+        <legend>Supporting evidence (upload it under Documents first)</legend>
+        {evidence.length ? (
+          evidence.map((d) => (
+            <label key={d.id} className="check small">
+              <input type="checkbox" name="evidence" value={d.id} /> <span>{d.filename}</span>
+            </label>
+          ))
+        ) : (
+          <p className="small muted" style={{ margin: 0 }}>
+            No exception evidence on file yet.
+          </p>
+        )}
+      </fieldset>
+      <div>
+        <SubmitButton className="btn">Request Manual Financial Assessment</SubmitButton>
+      </div>
     </ActionForm>
   );
 }

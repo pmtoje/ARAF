@@ -46,7 +46,7 @@ describe("Who can open a request", () => {
     await setOrgLink(await ctxFor(ADMIN), { staffId: await sid("rm.ade@altbank.ng"), relation: "UNIT_HEAD", managerId: uh, reason: REASON });
     const id = await createSubmittedCase({ initiator: "RM", amountKobo: N(1_000_000) });
     expect(await view(uh, id)).toContain("SUPERVISOR");
-    const draft = await createDraft(await ctxFor("rm.ade@altbank.ng"), { initiatorRole: "RM", applicantType: "INDIVIDUAL" });
+    const draft = await createDraft(await ctxFor("rm.ade@altbank.ng"), { daoCode: "DAO-1001", initiatorRole: "RM", applicantType: "INDIVIDUAL" });
     expect(await view(uh, draft.id)).toEqual([]);
     // Region on the Unit Head role.
     const region = (await db.query("SELECT region FROM applications WHERE id = $1", [id])).rows[0].region as string;
@@ -57,7 +57,7 @@ describe("Who can open a request", () => {
   it("the Super Admin sees every request, including drafts", async () => {
     const admin = await sid(ADMIN);
     const id = await createSubmittedCase({ initiator: "RM", amountKobo: N(1_000_000) });
-    const draft = await createDraft(await ctxFor("rm.ade@altbank.ng"), { initiatorRole: "RM", applicantType: "INDIVIDUAL" });
+    const draft = await createDraft(await ctxFor("rm.ade@altbank.ng"), { daoCode: "DAO-1001", initiatorRole: "RM", applicantType: "INDIVIDUAL" });
     expect(await view(admin, id)).toContain("SUPER_ADMIN");
     expect(await view(admin, draft.id)).toContain("SUPER_ADMIN");
     await expect(getCase(await ctxFor(ADMIN), id)).resolves.toBeTruthy();

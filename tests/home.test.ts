@@ -11,7 +11,7 @@ beforeEach(resetDb);
 describe("Personal home figures and drafts", () => {
   it("counts submitted applications as initiated and never counts drafts", async () => {
     const rm = (await db.query("SELECT id FROM staff WHERE email = 'rm.ade@altbank.ng'")).rows[0].id;
-    await createDraft(await ctxFor("rm.ade@altbank.ng"), { initiatorRole: "RM", applicantType: "INDIVIDUAL" });
+    await createDraft(await ctxFor("rm.ade@altbank.ng"), { daoCode: "DAO-1001", initiatorRole: "RM", applicantType: "INDIVIDUAL" });
     const id = await createSubmittedCase({ initiator: "RM", amountKobo: 250_000_000 });
     const sub = (await db.query("SELECT submitted_at, requested_amount_kobo FROM applications WHERE id = $1", [id])).rows[0];
     const f = await initiatorFigures(db, rm, "year", new Date(new Date(sub.submitted_at).getTime() + 60_000));
@@ -22,8 +22,8 @@ describe("Personal home figures and drafts", () => {
 
   it("only the person who started a draft can delete it, only while unsubmitted, and other applications are untouched", async () => {
     const ctx = await ctxFor("rm.ade@altbank.ng");
-    const a = await createDraft(ctx, { initiatorRole: "RM", applicantType: "INDIVIDUAL" });
-    const b = await createDraft(ctx, { initiatorRole: "RM", applicantType: "INDIVIDUAL" });
+    const a = await createDraft(ctx, { daoCode: "DAO-1001", initiatorRole: "RM", applicantType: "INDIVIDUAL" });
+    const b = await createDraft(ctx, { daoCode: "DAO-1001", initiatorRole: "RM", applicantType: "INDIVIDUAL" });
     const submitted = await createSubmittedCase({ initiator: "RM", amountKobo: 100_000_000 });
     await expect(deleteDraft(await ctxFor("rm.bola@altbank.ng"), a.id)).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(deleteDraft(ctx, submitted)).rejects.toMatchObject({ code: "CONFLICT" });

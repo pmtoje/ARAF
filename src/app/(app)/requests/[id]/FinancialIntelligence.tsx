@@ -9,7 +9,11 @@ import { bureauChecksFor, type BureauCheckRow } from "@/server/domain/bureau-che
 import { periculumReadiness } from "@/server/integrations/periculum/client";
 import { formatKobo, koboToNairaString } from "@/server/money";
 import { formatLagos } from "@/server/time";
-import { AutoRefresh, RetryStatements, StartAnalysis, WhatIf } from "./FiClient";
+import { AutoRefresh, ManualAssessmentRequest, RetryStatements, StartAnalysis, WhatIf } from "./FiClient";
+import { analysisFreshness, reviewsFor, type Freshness, type ReviewRow } from "@/server/domain/fi-governance";
+import { REPORT_CATEGORY } from "@/server/domain/fi-report";
+import { CATEGORY_LABELS, riskFor, type RiskLevel, type RiskProfile } from "@/server/domain/fi-risk";
+import { configById, profileRules, type ProfileRules } from "@/server/domain/products";
 
 type Case = Awaited<ReturnType<typeof getCase>>;
 const ic = { className: "icon", "aria-hidden": true } as const;
@@ -53,6 +57,13 @@ export interface FiState {
   bureau: BureauCheckRow[];
   isAnalyst: boolean;
   detail: boolean;
+  /** Whether the analysis still matches the application's statements (an outdated one is never shown as current). */
+  freshness?: Freshness;
+  reviews?: ReviewRow[];
+  versions?: { id: string; version: number; status: string; source: string; created_at: Date; superseded_at: Date | null; relied_on_at: Date | null }[];
+  reports?: { id: string; version_no: number; filename: string; uploaded_at: Date; superseded_at: Date | null; meta: Record<string, string> }[];
+  manual?: { required: boolean; approverRole: string | null; exceptions: { id: string; status: string; reason: string; requested_at: Date; decision_note: string | null }[] };
+  risk?: RiskProfile | null;
 }
 
 /** Loads the analysis in force for the request and works out what this viewer may see and do. */
@@ -63,10 +74,357 @@ export async function loadFi(c: Case, staffId: string, roles: string[]): Promise
     : [[], null, null, []];
   const t = c.openTask;
   const isAnalyst = !!t && (CREDIT_ANALYSIS_STAGES as readonly string[]).includes(t.stage) && t.assignee_id === staffId && roles.includes(t.assignee_role);
-  return { analysis, statements, intelligence, recommendation, bureau, isAnalyst, detail: isAnalyst || roles.some((r) => CREDIT_DETAIL_ROLES.includes(r)) };
+  const app = c.app as { id: string; product_config_id?: string | null; customer_profile?: string | null };
+  let rules: ProfileRules | null = null;
+  if (app.product_config_id && app.customer_profile) {
+    try {
+      rules = profileRules((await configById(db, app.product_config_id)).config, app.customer_profile);
+    } catch {
+      rules = null;
+    }
+  }
+  const [freshness, reviews, versions, reports, manualEx] = await Promise.all([
+    analysis ? analysisFreshness(db, analysis) : Promise.resolve(undefined),
+    reviewsFor(db, app.id),
+    db.query("SELECT id, version, status, source, created_at, superseded_at, relied_on_at FROM fi_analyses WHERE application_id = $1 ORDER BY version DESC", [app.id]).then((r) => r.rows),
+    db
+      .query("SELECT id, version_no, filename, uploaded_at, superseded_at, meta FROM documents WHERE application_id = $1 AND category = $2 AND scan_status = 'CLEAN' AND purged_at IS NULL ORDER BY version_no DESC", [app.id, REPORT_CATEGORY])
+      .then((r) => r.rows),
+    db.query("SELECT id, status, reason, requested_at, decision_note FROM policy_exceptions WHERE application_id = $1 AND type = 'MANUAL_ASSESSMENT' ORDER BY requested_at DESC", [app.id]).then((r) => r.rows),
+  ]);
+  return {
+    analysis,
+    statements,
+    intelligence,
+    recommendation,
+    bureau,
+    isAnalyst,
+    detail: isAnalyst || roles.some((r) => CREDIT_DETAIL_ROLES.includes(r)),
+    freshness,
+    reviews,
+    versions,
+    reports,
+    manual: { required: !!rules?.statementAnalysis?.required, approverRole: rules?.statementAnalysis?.manualExceptionApproverRole ?? null, exceptions: manualEx },
+    risk: analysis && !["QUEUED", "PROCESSING"].includes(analysis.status) ? await riskFor(db, analysis.id) : null,
+  };
 }
 
 const statementDocs = (c: Case) => c.documents.filter((d) => !d.superseded_at && d.category === "BANK_STATEMENT").map((d) => ({ id: d.id, filename: d.filename }));
+type Link = (docId: string, mode: "view" | "download") => string;
+
+function StaleBanner({ s }: { s: FiState }) {
+  if (!s.analysis || s.freshness?.current !== false) return null;
+  return (
+    <div className="alert alert-warn" role="alert">
+      <AlertTriangle {...ic} />
+      <span>
+        <strong>Requires refresh.</strong> {s.freshness.reason} The figures below are from analysis v{s.analysis.version} and are kept for the record; they are not used as the current assessment.
+      </span>
+    </div>
+  );
+}
+
+/** Before analysis: what is on file (brief §7). Coverage comes from the upload; bank and account appear after analysis. */
+function StatementsOnFile({ c }: { c: Case }) {
+  const docs = c.documents.filter((d) => !d.superseded_at && d.category === "BANK_STATEMENT");
+  if (!docs.length) return null;
+  return (
+    <div className="table-wrap">
+      <table className="data">
+        <thead>
+          <tr>
+            <th>Statement</th>
+            <th>Coverage</th>
+            <th>Upload</th>
+          </tr>
+        </thead>
+        <tbody>
+          {docs.map((d) => (
+            <tr key={d.id}>
+              <td>{d.filename}</td>
+              <td className="small">{d.meta?.coverageFrom && d.meta?.coverageTo ? `${d.meta.coverageFrom} to ${d.meta.coverageTo}` : "Not stated"}</td>
+              <td>
+                <span className={`badge ${d.scan_status === "CLEAN" ? "badge-green" : d.scan_status === "REJECTED" ? "badge-red" : "badge-warn"}`}>{d.scan_status === "CLEAN" ? "Ready" : label(d.scan_status)}</span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** Monthly adjusted inflow and outflow: grouped bars, one axis, legend + table view (Monthly figures). */
+function TrendChart({ fi }: { fi: FinancialIntelligence }) {
+  const months = fi.months.filter((m) => fi.assessmentMonths.includes(m.month));
+  if (months.length < 2) return null;
+  const max = Math.max(...months.flatMap((m) => [m.adjustedInflowKobo, m.adjustedOutflowKobo]), 1);
+  const W = 640;
+  const H = 180;
+  const padL = 8;
+  const padB = 22;
+  const band = (W - padL) / months.length;
+  const bw = Math.min(26, (band - 14) / 2);
+  const y = (v: number) => ((H - padB - 8) * v) / max;
+  const bar = (x: number, h: number) => {
+    const r = Math.min(4, h);
+    const top = H - padB - h;
+    return `M${x},${H - padB} V${top + r} Q${x},${top} ${x + r},${top} H${x + bw - r} Q${x + bw},${top} ${x + bw},${top + r} V${H - padB} Z`;
+  };
+  const compact = (k: number) => (k >= 100_000_000 ? `₦${(k / 100_000_000).toFixed(1)}m` : `₦${Math.round(k / 100_000).toLocaleString("en-NG")}k`);
+  return (
+    <figure style={{ margin: 0 }}>
+      <div className="row small" style={{ gap: 16, marginBottom: 6 }} aria-hidden="true">
+        <span>
+          <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "var(--series-1)", marginRight: 6 }} />
+          Adjusted inflow
+        </span>
+        <span>
+          <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "var(--series-2)", marginRight: 6 }} />
+          Adjusted outflow
+        </span>
+        <span className="muted">Highest month {compact(max)}</span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label={`Monthly adjusted inflow and outflow for ${months.length} assessment months. Figures are in the Monthly figures table.`}>
+        <line x1={padL} x2={W} y1={H - padB} y2={H - padB} stroke="var(--line-strong)" strokeWidth="1" />
+        {months.map((m, i) => {
+          const x0 = padL + i * band + (band - (2 * bw + 2)) / 2;
+          return (
+            <g key={m.month}>
+              <path d={bar(x0, y(m.adjustedInflowKobo))} fill="var(--series-1)">
+                <title>{`${m.month} adjusted inflow ${money(m.adjustedInflowKobo)}`}</title>
+              </path>
+              <path d={bar(x0 + bw + 2, y(m.adjustedOutflowKobo))} fill="var(--series-2)">
+                <title>{`${m.month} adjusted outflow ${money(m.adjustedOutflowKobo)}`}</title>
+              </path>
+              <text x={x0 + bw + 1} y={H - 6} textAnchor="middle" fontSize="11" fill="var(--muted)">
+                {m.month}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </figure>
+  );
+}
+
+const LEVEL_STYLE: Record<RiskLevel, { badge: string; label: string }> = {
+  HIGH: { badge: "badge-red", label: "High" },
+  WATCH: { badge: "badge-warn", label: "Watch" },
+  LOW: { badge: "badge-green", label: "Low" },
+  NOT_REPORTED: { badge: "", label: "Not reported" },
+};
+const GRADE_BADGE: Record<RiskProfile["grade"], string> = { LOW: "badge-green", MODERATE: "badge-yellow", ELEVATED: "badge-warn", HIGH: "badge-red" };
+
+/** Credit Risk Report: grade, key risks and every indicator with its evidence and source. */
+function RiskReport({ risk }: { risk: RiskProfile }) {
+  const cats = Object.keys(CATEGORY_LABELS) as (keyof typeof CATEGORY_LABELS)[];
+  return (
+    <div className="card stack" aria-labelledby="h-risk">
+      <div className="row" style={{ justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
+        <h2 id="h-risk" style={{ margin: 0 }}>
+          Credit Risk Report
+        </h2>
+        <span className={`badge ${GRADE_BADGE[risk.grade]}`} style={{ fontSize: 13, padding: "4px 12px" }}>
+          {risk.gradeLabel}
+        </span>
+      </div>
+      <p style={{ margin: 0 }}>{risk.headline}</p>
+      <div className="row small" style={{ gap: 8, flexWrap: "wrap" }}>
+        <span className="badge badge-red">{risk.counts.high} high</span>
+        <span className="badge badge-warn">{risk.counts.watch} watch</span>
+        <span className="badge badge-green">{risk.counts.low} low</span>
+        {risk.counts.notReported > 0 && <span className="badge">{risk.counts.notReported} not reported</span>}
+      </div>
+      {risk.keyRisks.length > 0 && (
+        <div>
+          <p className="eyebrow" style={{ marginBottom: 4 }}>
+            Key risks
+          </p>
+          <ul className="small" style={{ margin: 0 }}>
+            {risk.keyRisks.map((k) => (
+              <li key={k}>{k}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {risk.mitigants.length > 0 && (
+        <div>
+          <p className="eyebrow" style={{ marginBottom: 4 }}>
+            Mitigants
+          </p>
+          <ul className="small" style={{ margin: 0 }}>
+            {risk.mitigants.map((k) => (
+              <li key={k}>{k}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <details>
+        <summary className="small" style={{ cursor: "pointer", fontWeight: 700 }}>
+          All {risk.indicators.length} risk indicators
+        </summary>
+        {cats.map((cat) => {
+          const items = risk.indicators.filter((i) => i.category === cat);
+          if (!items.length) return null;
+          return (
+            <div key={cat} style={{ marginTop: 10 }}>
+              <p className="eyebrow" style={{ margin: "0 0 4px" }}>
+                {CATEGORY_LABELS[cat]}
+              </p>
+              <div className="table-wrap">
+                <table className="data">
+                  <tbody>
+                    {items.map((i) => (
+                      <tr key={i.key}>
+                        <td style={{ width: 96 }}>
+                          <span className={`badge ${LEVEL_STYLE[i.level].badge}`}>{LEVEL_STYLE[i.level].label}</span>
+                        </td>
+                        <td>
+                          <strong>{i.label}</strong>
+                          <div className="small muted">
+                            {i.evidence} <span>· {i.source}</span>
+                          </div>
+                        </td>
+                        <td className="num" style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                          {i.value}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })}
+        <p className="small muted" style={{ marginTop: 8 }}>
+          {risk.version} · thresholds: {risk.thresholdsStatus}. Decision support only: the credit decision stays with the approvers and the 30% DSR rule.
+        </p>
+      </details>
+    </div>
+  );
+}
+
+function ReportsAndVersions({ s, link }: { s: FiState; link: Link }) {
+  const reports = s.reports ?? [];
+  const versions = s.versions ?? [];
+  if (!reports.length && versions.length < 2) return null;
+  return (
+    <div className="card stack">
+      <h2 style={{ margin: 0 }}>Credit Risk Report (PDF)</h2>
+      {reports[0] && !reports[0].superseded_at && (
+        <p className="small" style={{ margin: 0 }}>
+          <a className="btn btn-sm" href={link(reports[0].id, "download")}>
+            Download the current report (PDF)
+          </a>{" "}
+          <a href={link(reports[0].id, "view")} target="_blank" rel="noreferrer">
+            View
+          </a>{" "}
+          <span className="muted">· saved automatically with the analysis; also in Documents and the archive pack.</span>
+        </p>
+      )}
+      {reports.length > 1 && (
+        <details>
+          <summary className="small" style={{ cursor: "pointer" }}>
+            Earlier report versions ({reports.length - 1})
+          </summary>
+          <ul className="small">
+            {reports.slice(1).map((d) => (
+              <li key={d.id}>
+                <a href={link(d.id, "download")}>{d.filename}</a> · analysis v{d.meta?.analysisVersion ?? "—"} · {formatLagos(d.uploaded_at)}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+      {versions.length > 1 && (
+        <details>
+          <summary className="small" style={{ cursor: "pointer" }}>
+            Analysis versions ({versions.length})
+          </summary>
+          <ul className="small">
+            {versions.map((v) => (
+              <li key={v.id}>
+                v{v.version} · {label(v.status)} · {formatLagos(v.created_at)}
+                {v.superseded_at ? ` · superseded ${formatLagos(v.superseded_at)}` : " · current"}
+                {v.relied_on_at ? " · relied on by the credit decision" : ""}
+                {v.source === "FIXTURE" ? " · test data" : ""}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </div>
+  );
+}
+
+function ReviewHistory({ rows }: { rows: ReviewRow[] }) {
+  if (!rows.length) return null;
+  const show = (a: ReviewRow["adjustments"][number], v: number | null) => (v === null ? "—" : a.field === "TENOR" ? `${v} months` : money(v));
+  return (
+    <div className="card stack">
+      <h2 style={{ margin: 0 }}>Credit analyst review</h2>
+      <ul className="stack" style={{ listStyle: "none", padding: 0, margin: 0 }}>
+        {rows.map((r) => (
+          <li key={r.id} className="small">
+            <span className={`badge ${r.kind === "ADJUSTED" ? "badge-warn" : r.kind === "MANUAL" ? "badge-blue" : "badge-green"}`}>
+              {r.kind === "ADJUSTED" ? "Adjusted" : r.kind === "MANUAL" ? "Manual Financial Assessment" : "Confirmed"}
+            </span>{" "}
+            {r.actor_name} · {formatLagos(r.created_at)}
+            {r.adjustments.length > 0 && (
+              <ul style={{ margin: "4px 0 0" }}>
+                {r.adjustments.map((a, i) => (
+                  <li key={i}>
+                    {a.label}: {show(a, a.original)} → {show(a, a.adjusted)}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {r.reason && <div className="muted">Reason: {r.reason}</div>}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** Controlled Manual Financial Assessment exception (brief §28): shown to the assigned analyst where analysis is mandatory. */
+function ManualAssessment({ c, s }: { c: Case; s: FiState }) {
+  const m = s.manual;
+  if (!m?.required) return null;
+  const approved = m.exceptions.find((e) => e.status === "APPROVED");
+  const pending = m.exceptions.find((e) => e.status === "REQUESTED");
+  const evidence = c.documents.filter((d) => !d.superseded_at && d.scan_status === "CLEAN" && ["EXCEPTION_EVIDENCE", "SUPPORTING", "CREDIT_REPORT"].includes(d.category)).map((d) => ({ id: d.id, filename: d.filename }));
+  return (
+    <div className="card stack">
+      <h2 style={{ margin: 0 }}>Manual Financial Assessment</h2>
+      {approved ? (
+        <p className="small" style={{ margin: 0 }}>
+          <span className="badge badge-blue">Approved exception</span> Record the final assessment manually; it is labelled Manual Financial Assessment and the 30% DSR still applies. Decision: {approved.decision_note}
+        </p>
+      ) : pending ? (
+        <p className="small" style={{ margin: 0 }}>
+          <span className="badge badge-warn">Awaiting decision</span> Requested {formatLagos(pending.requested_at)}: {pending.reason}
+        </p>
+      ) : !m.approverRole ? (
+        <p className="small muted" style={{ margin: 0 }}>
+          This product requires Automatic Statement Analysis and does not permit a manual exception. The application stays pending assessment until the analysis completes.
+        </p>
+      ) : s.isAnalyst ? (
+        <>
+          <p className="small muted" style={{ margin: 0 }}>
+            Use only when Automatic Statement Analysis cannot be completed (for example Periculum is unavailable). The configured authority decides. Automation remains the default.
+          </p>
+          <ManualAssessmentRequest applicationId={c.app.id} evidence={evidence} />
+        </>
+      ) : (
+        <p className="small muted" style={{ margin: 0 }}>
+          Automatic Statement Analysis is required for this product before credit approval.
+        </p>
+      )}
+    </div>
+  );
+}
 
 function SourceBanner({ a }: { a: AnalysisRow }) {
   if (a.source !== "FIXTURE") return null;
@@ -394,7 +752,7 @@ function InitiatorSummary({ s }: { s: FiState }) {
 }
 
 /** The Financial Intelligence tab: before, during and after Automatic Statement Analysis. */
-export async function FinancialIntelligenceTab({ c, s }: { c: Case; s: FiState }) {
+export async function FinancialIntelligenceTab({ c, s, link }: { c: Case; s: FiState; link: Link }) {
   const docs = statementDocs(c);
   const a = s.analysis;
   const ready = s.isAnalyst ? await periculumReadiness() : { ready: true, problem: null };
@@ -408,6 +766,7 @@ export async function FinancialIntelligenceTab({ c, s }: { c: Case; s: FiState }
             ? `${docs.length} bank statement${docs.length === 1 ? "" : "s"} on file. Not analysed yet.`
             : "No bank statement is on file yet. Analysis needs at least one PDF bank statement."}
         </p>
+        <StatementsOnFile c={c} />
         {s.isAnalyst ? (
           ready.ready ? (
             docs.length > 0 && (
@@ -429,11 +788,19 @@ export async function FinancialIntelligenceTab({ c, s }: { c: Case; s: FiState }
             The assigned credit reviewer runs the analysis during credit review.
           </p>
         )}
+        {s.isAnalyst && <ManualAssessment c={c} s={s} />}
+        <ReviewHistory rows={s.reviews ?? []} />
       </div>
     );
   }
 
-  if (!s.detail) return <InitiatorSummary s={s} />;
+  if (!s.detail)
+    return (
+      <div className="stack">
+        <StaleBanner s={s} />
+        <InitiatorSummary s={s} />
+      </div>
+    );
 
   const running = IN_FLIGHT.has(a.status);
   const done = s.statements.filter((x) => ["PROCESSED", "REUSED", "DUPLICATE"].includes(x.status)).length;
@@ -444,6 +811,7 @@ export async function FinancialIntelligenceTab({ c, s }: { c: Case; s: FiState }
   return (
     <div className="stack">
       <SourceBanner a={a} />
+      <StaleBanner s={s} />
       <div className="card stack">
         <div className="row" style={{ justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
           <h2 style={{ margin: 0 }}>Automatic Statement Analysis</h2>
@@ -480,7 +848,11 @@ export async function FinancialIntelligenceTab({ c, s }: { c: Case; s: FiState }
         )}
       </div>
 
+      {s.risk && !running && <RiskReport risk={s.risk} />}
       {r && <PrimarySummary r={r} />}
+      <ReviewHistory rows={s.reviews ?? []} />
+      <ReportsAndVersions s={s} link={link} />
+      {s.isAnalyst && (a.status !== "COMPLETED" || s.freshness?.current === false || !ready.ready) && <ManualAssessment c={c} s={s} />}
 
       {!running && (
         <div className="card stack">
@@ -502,6 +874,12 @@ export async function FinancialIntelligenceTab({ c, s }: { c: Case; s: FiState }
       )}
 
       <Breakdown fi={s.intelligence} statements={s.statements} />
+      {s.intelligence && s.intelligence.months.length > 1 && (
+        <div className="card stack">
+          <h2 style={{ margin: 0 }}>Monthly trend</h2>
+          <TrendChart fi={s.intelligence} />
+        </div>
+      )}
       {s.intelligence && <Consolidated fi={s.intelligence} />}
       {s.intelligence && <Monthly fi={s.intelligence} />}
       <Bureau rows={s.bureau} />
@@ -536,11 +914,23 @@ export function FinancialIntelligenceCard({ s, href }: { s: FiState; href: strin
               <span className="badge badge-warn">Test data</span>
             </>
           )}
+          {s.detail && s.risk && (
+            <>
+              {" "}
+              <span className={`badge ${GRADE_BADGE[s.risk.grade]}`}>{s.risk.gradeLabel}</span>
+            </>
+          )}
           {s.detail && r?.dsr.percent && <span className="muted"> · DSR {r.dsr.percent}%</span>}
+          {s.freshness?.current === false && (
+            <>
+              {" "}
+              <span className="badge badge-warn">Requires refresh</span>
+            </>
+          )}
         </p>
       )}
       <Link className="btn btn-sm" href={href}>
-        {a ? "Open the analysis" : "Run Automatic Statement Analysis"}
+        {a ? "View Statement Analysis" : s.isAnalyst ? "Automatic Statement Analysis" : "View financial intelligence"}
       </Link>
     </div>
   );
@@ -551,7 +941,7 @@ export function verifiedDefaults(s: FiState) {
   const a = s.analysis;
   const r = s.recommendation;
   const fi = s.intelligence;
-  if (!a || !r || !fi || a.status !== "COMPLETED" || r.income.monthlyKobo === null) return null;
+  if (!a || !r || !fi || a.status !== "COMPLETED" || r.income.monthlyKobo === null || s.freshness?.current === false) return null;
   const starts = fi.accounts.map((x) => x.periodStart).filter(Boolean) as string[];
   const ends = fi.accounts.map((x) => x.periodEnd).filter(Boolean) as string[];
   const obligations =

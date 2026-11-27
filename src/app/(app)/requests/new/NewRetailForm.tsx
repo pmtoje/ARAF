@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { createRetailDraftAction } from "../retail-actions";
+import { DAO_CODE_HINT } from "@/lib/dao";
 
 export interface CatalogueProduct {
   code: string;
@@ -55,6 +56,13 @@ export function NewRetailForm({ products, roles, defaultRole, category }: { prod
   };
   return (
     <ActionForm action={createRetailDraftAction} refreshOnSuccess={false} className="stack new-request">
+      <div className="field" style={{ maxWidth: 360 }}>
+        <label htmlFor="daoCode">DAO code</label>
+        <input id="daoCode" name="daoCode" required minLength={2} maxLength={30} autoComplete="off" placeholder="e.g. DAO-1001" style={{ textTransform: "uppercase" }} aria-describedby="daoCode-hint" />
+        <span className="hint" id="daoCode-hint">
+          {DAO_CODE_HINT}. Required before anything else; it identifies the account officer on this request.
+        </span>
+      </div>
       {single ? (
         <input type="hidden" name="productCode" value={product} />
       ) : (

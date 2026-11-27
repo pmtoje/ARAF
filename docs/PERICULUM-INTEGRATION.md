@@ -140,3 +140,124 @@ and is shown to the analyst.
 4. The webhook URL registration process and the 32-character secret (optional: polling works without them).
 5. Commercial pricing per statement, used for the usage and cost figures. ARAF shows "not configured" until supplied.
 6. Data processing agreement, hosting and retention terms, and the Information Security / Data Protection approvals.
+
+---
+
+# Implementation record (Phases 2–7)
+
+## 6. What is built
+
+| Phase | Delivered | Main files |
+|---|---|---|
+| 2 Backend integration | Secure configuration (server-side only; Super Admin enters credentials, the secret is encrypted and write-only), Periculum adapter, worker processing with bounded concurrency, response validation, encrypted result storage, signed webhook (HMAC-SHA512) with polling fallback, reconciliation of ambiguous submissions, optional Blacklist Search | `src/server/integrations/periculum/*`, `src/server/domain/statement-analysis.ts`, `bureau-check.ts`, `migrations/059–061` |
+| 3 Financial intelligence | Per-statement figures, multi-account consolidation, duplicate and overlap removal, transfers between the applicant's own accounts removed, loan proceeds and unverified-account inflows excluded, salary and business intelligence, exceptions with severity | `financial-intelligence.ts` |
+| 4 Affordability and recommendation | The existing affordability engine on the verified figures; 30% income DSR (exact, unrounded comparison); declared and detected obligations reconciled (larger used once); maximum eligible amount; eight outcomes; commentary; DSR threshold other than 30% flagged, never overridden | `credit-recommendation.ts` |
+| 5 Credit analyst workspace | Financial intelligence tab (before / during / after), one-click Automatic Statement Analysis, retry with reason and passwords, what-if, exceptions, statement and account breakdown, consolidated position, monthly figures and trend chart, role-based view, final assessment pre-filled from the verified figures | `src/app/(app)/requests/[id]/FinancialIntelligence.tsx`, `FiClient.tsx`, `fi-actions.ts` |
+| 6 Persistence and workflow | Report saved automatically as a branded PDF document (each regeneration a new version; earlier versions kept; included in the archive pack); analyst confirmation / adjustment history with originals, reason, analyst and time; analysis versioning with "requires refresh" when statements change; facility timeline events; product rule making analysis mandatory, enforced in the workflow engine; Manual Financial Assessment exception through the existing exception process; Unit Head action labelled **Approve for Disbursement**; Financial Intelligence administration (monitoring and usage) | `fi-governance.ts`, `fi-report.ts`, `fi-monitoring.ts`, `migrations/062`, `admin/periculum` |
+| 7 Testing and security | See sections 8–10 | `tests/periculum*.test.ts`, `financial-intelligence.test.ts`, `credit-recommendation.test.ts`, `fi-persistence.test.ts` |
+
+### Workflow rules (Phase 6)
+
+- **Mandatory analysis is a product rule** (Product Settings → controls: "Automatic Statement Analysis required before
+  credit approval"). It is off for every product until configured and published through the existing Product Settings
+  approval. When on, the first credit reviewer's **Approve** is refused by the workflow engine unless there is a
+  completed analysis that still matches the application's bank statements, or an approved Manual Financial Assessment
+  exception. Hiding a button is never the control.
+- **Manual Financial Assessment**: requested by the assigned credit reviewer with a reason and evidence; decided by the
+  role configured on the product (blank = not permitted). The final assessment is then labelled *Manual Financial
+  Assessment*; the 30% DSR still applies through the same engine.
+- **Analyst adjustments**: changing a verified figure (income / inflow or existing obligations) needs a reason of at
+  least 10 characters, enforced on the server. The Periculum-derived result on the analysis is never changed; the
+  adjusted values, original values, analyst and time are kept in `fi_reviews`, and a new report version is produced.
+- **Versioning**: a new analysis supersedes the previous one (kept). The analysis a credit decision relied on is
+  marked (`relied_on_at`). An analysis whose statements have changed is shown as *Requires refresh*, is not used to
+  pre-fill the assessment and does not satisfy the mandatory-analysis rule.
+- **Divisional Head**: reaches the request only after credit review and the Unit Head's approval for disbursement,
+  because the stage engine opens that task only after those decisions (unchanged).
+- **Who sees what**: credit officers and leads, CX credit reviewer, Unit Head, Divisional Head, Head of Unit,
+  disbursement officers and Super Admin see the full report; everyone else allowed on the request (initiator, RM,
+  Team Lead) sees the outcome, the amount supported and what may be asked for. All view the same saved version.
+
+## 7. Facility timeline events
+
+Recorded in the existing request history (Activity tab), with actor or *System*, time, outcome and analysis version:
+Automatic Statement Analysis started · bank statement processed / could not be processed · statement analysis
+completed / partly completed / needs verification / failed · consolidated financial assessment completed · DSR assessed
+and recommendation generated · material financial exception identified · Financial Assessment Report saved · credit
+analyst confirmed / adjusted the financial assessment · Manual Financial Assessment recorded · existing credit, Unit
+Head, Divisional Head and disbursement events.
+
+## 8. Security and customer data protection
+
+| Control | How |
+|---|---|
+| Credentials | Never in code or the repository; entered by a Super Admin; client secret encrypted (AES-256-GCM field encryption) and never returned to the browser; audit entries name the change, never the value |
+| Network | Only `https` hosts under `insights-periculum.io` and `auth-periculum.app` are accepted for the connection |
+| Who can run analysis | Only the credit reviewer assigned to the open credit-review task (checked on the server) |
+| Who can see detail | Server-side role list (`CREDIT_DETAIL_ROLES`); what-if is refused on the server for other roles |
+| Statement data | Vendor responses stored encrypted; PDF passwords encrypted and cleared after submission |
+| Account numbers | Stored analysis uses a keyed one-way reference (HMAC) for each account, not the number; screens and the PDF show `••••1234` |
+| Webhook | Signature verified (HMAC-SHA512, constant-time compare); invalid signatures audited and ignored; a delivery only brings the next status check forward |
+| Billing | SHA-256 de-duplication, reuse of processed statements, one analysis in flight per application, ambiguous submissions reconciled not resent, Blacklist Search with unknown outcome not resent |
+| Test data | The simulated service is refused in production and is labelled on every screen, in the report and in the saved assessment note |
+
+## 9. Test coverage
+
+Automated (vitest, real PostgreSQL): sign-in and token reuse; switched-off refusal; upload never calls Periculum;
+only the assigned reviewer can start; duplicates; reuse; re-run reason; partial failure and retry; passwords; altered
+statements; concurrency; ambiguous submissions (accepted and lost); rate limits; webhook signature and duplicates;
+Blacklist Search on/off/unknown/directors; credentials screen rules; consolidation, transfers, ownership, salary and
+business intelligence; the brief's 30% DSR example, the exact-30% boundary, missing income, obligation
+reconciliation, all outcomes, policy flag; report saved automatically with timeline events; report regeneration
+without vendor calls; confirmation and adjustment history; server-side adjustment reason; freshness; mandatory-analysis
+gate; Manual Financial Assessment exception; monitoring figures. Browser checks: analyst and initiator views,
+before / during / after, what-if, pre-filled assessment, phone width.
+
+## 10. Deployment readiness (do not deploy to production without approval)
+
+1. Run migrations `059`–`062` (Render pre-deploy runs `npm run migrate`).
+2. Staging: set `PERICULUM_ENABLED=true` on the staging web project **and** the staging worker; leave
+   `PERICULUM_MODE` unset (`live`). Enter the **test** credentials in Administration → Financial Intelligence and run
+   **Test sign-in** until it succeeds.
+3. Optional: register `<APP_URL>/api/integrations/periculum/webhook` with Periculum and set
+   `PERICULUM_WEBHOOK_SECRET` (polling works without it).
+4. Run one real test application end to end on staging (statements → analysis → report → confirmation → approvals).
+5. For each product that should require analysis, publish the Product Settings change (and the manual-exception
+   authority, if the bank permits one) through the normal approval.
+6. Production only after: successful staging run, Information Security / Data Protection approval, data processing
+   agreement, confirmed pricing (to show charges) and explicit go-live approval. Then repeat steps 2–3 with the live
+   credentials.
+7. Rollback: set `PERICULUM_ENABLED=false` (analysis stops; saved reports stay viewable; applications on products
+   requiring analysis wait for the switch or an approved manual exception).
+
+## 11. Credit Risk Report (bank request, 28 Nov 2026)
+
+Whatever Periculum returns is presented as a **Credit Risk Report**, on screen (Financial intelligence tab) and as the
+generated PDF (document type "Credit Risk Report (generated by ARAF)", `src/server/domain/fi-report-pdf.ts`).
+
+- **Risk grade** (Low / Moderate / Elevated / High) from risk indicators in five groups: affordability and debt,
+  account conduct, income stability, statement integrity, bureau and background checks (`src/server/domain/fi-risk.ts`).
+- **Periculum fields used** (published variable definitions only): `behavioralAnalysis.numberOfBettingTransactions`,
+  `gamblingStatus`, `gamblingRate`, `accountSweep`, `percentOfInflowIrregularity`, `loanToInflowRate`;
+  `patternAnalysis` / `transactionPatternAnalysis.returnCheque`, `missingTransactions`,
+  `percentNumberOfDaysBalanceWasLessThan10ThousandNaira`; `confidenceOnParsing`; `pdfCreatedDate` / `pdfModifiedDate`;
+  the ALTERED status. ARAF adds DSR against the 30% limit, lenders being repaid, loan proceeds, volatility, net cash
+  flow, salary regularity, coverage, account ownership, SeedFi and Blacklist Search.
+- A field Periculum does not return is shown as **not reported**, never as clean.
+- **Grade rule**: high = 3 points, watch = 1; High if any statement-integrity, returned-cheque or bureau-delinquency
+  signal is high, or 9+ points; Elevated 5–8; Moderate 2–4; Low 0–1.
+- **Thresholds are indicative** and kept in one table (`RISK_THRESHOLDS`) for Credit Risk Management to approve or
+  change. The grade is decision support; it never approves or declines and does not alter the 30% DSR.
+- To confirm with Periculum: whether `gamblingRate` and `loanToInflowRate` are fractions or percentages (ARAF reads
+  values of 1 or less as fractions) and the exact key of the pattern block in live responses.
+- PDF: charcoal and yellow brand cover; risk grade panel; requested / indicative eligible / recommended / capacity
+  tiles; DSR gauge against the 30% limit; recommendation; key risks and mitigants; then every indicator with its
+  evidence and source, the monthly inflow/outflow chart and table, accounts, consolidation, affordability, analyst
+  review, observations and limitations. Account numbers masked.
+
+## 12. DAO code
+
+The DAO (account officer) code is the first field on the start screen of every retail (Vendor Financing, AltDrive,
+AltPower) and WakeelBoost request. A draft cannot be created without it; it stays editable in the draft (Customer
+section) and submission is blocked if it is cleared. It appears on the request overview, the Credit Risk Report and
+the existing reports/CSV (`daoCode`). Altphones keeps its own separate origination rules.

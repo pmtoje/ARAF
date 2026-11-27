@@ -18,6 +18,7 @@
  *  - A partial analysis is never presented as complete.
  */
 import type { Db } from "../db";
+import { hmac } from "../crypto";
 
 export const INTELLIGENCE_VERSION = "araf-financial-intelligence@1";
 const TRANSFER_WINDOW_DAYS = 3;
@@ -284,7 +285,8 @@ export function buildIntelligence(input: IntelligenceInput): FinancialIntelligen
     const bank = str(a.bankName);
     const acct = str(a.accountId);
     const name = str(a.accountName) ?? str(a.clientFullName);
-    const key = acct && digits(acct).length >= 6 ? `${normBank(bank) || "bank"}:${digits(acct)}` : `unknown:${s.statementId}`;
+    // A keyed one-way reference: matches the same account across statements without storing the number.
+    const key = acct && digits(acct).length >= 6 ? `acct:${hmac(`${normBank(bank) || "bank"}:${digits(acct)}`).slice(0, 24)}` : `unknown:${s.statementId}`;
     if (key.startsWith("unknown:"))
       exceptions.push({
         type: "ACCOUNT_NOT_IDENTIFIED",
