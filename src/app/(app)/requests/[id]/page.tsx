@@ -35,6 +35,7 @@ import { DeleteDocumentButton } from "@/components/DeleteDocumentButton";
 import { ClosingDocuments } from "./ClosingDocuments";
 import { RecordsCard } from "./RecordsCard";
 import { BouquetInspectCard, CadPanel } from "./Phase3Panels";
+import { FinancialIntelligenceCard, FinancialIntelligenceTab, loadFi } from "./FinancialIntelligence";
 import { CxReviewComments, RetailActionPanel, RetailAssessmentTab, RetailCaseTools, RetailOverview, RETAIL_MILESTONES, retailDocReviewable, DocReview } from "./RetailCase";
 import { AssessmentForm, BookingForm, CrmsOkay, FirstReviewApprove, GenerateOffer, ReasonButton, ReminderButton, RevealIdentifiers, TaskButton } from "./CaseClient";
 
@@ -48,9 +49,10 @@ const TABS = [
   ["overview", "Overview"],
   ["documents", "Documents"],
   ["assessment", "Assessment"],
+  ["intelligence", "Financial intelligence"],
   ["activity", "Activity"],
 ] as const;
-const TAB_ALIASES: Record<string, string> = { summary: "overview", history: "activity", audit: "activity" };
+const TAB_ALIASES: Record<string, string> = { summary: "overview", history: "activity", audit: "activity", analysis: "intelligence", statements: "intelligence" };
 
 /** Milestones for the progress timeline (presentation only; maps existing stages). */
 const MILESTONES: { label: string; stages: Stage[] }[] = [
@@ -124,6 +126,7 @@ export default async function CasePage({ params, searchParams }: { params: Promi
   const myTask = c.openTask && c.openTask.assignee_id === session.staffId && roles.includes(c.openTask.assignee_role) ? c.openTask : null;
   const rawTab = sp.tab ? TAB_ALIASES[sp.tab] ?? sp.tab : "overview";
   const tab = (TABS.find(([k]) => k === rawTab)?.[0] ?? "overview") as (typeof TABS)[number][0];
+  const fi = await loadFi(c, session.staffId, roles);
   const previewDoc = sp.doc ? c.documents.find((d) => d.id === sp.doc) ?? null : null;
   const link = (docId: string, mode: "view" | "download") => signDocumentLink(docId, session.staffId, session.sessionId, mode);
   const tabHref = (t: string, extra: SP = {}) => {
@@ -275,6 +278,7 @@ export default async function CasePage({ params, searchParams }: { params: Promi
           {tab === "overview" && (retail ? <RetailOverview c={c} /> : <Overview c={c} data={data} />)}
           {tab === "documents" && <Documents c={c} link={link} tabHref={tabHref} previewId={previewDoc?.id ?? null} myTask={myTask} isInitiator={isInitiator} />}
           {tab === "assessment" && (retail ? <RetailAssessmentTab c={c} /> : <Assessment c={c} />)}
+          {tab === "intelligence" && <FinancialIntelligenceTab c={c} s={fi} />}
           {tab === "activity" && (
             <>
               <History c={c} />
@@ -296,6 +300,7 @@ export default async function CasePage({ params, searchParams }: { params: Promi
             </Link>
           )}
           <CadPanel appId={app.id} stage={app.stage} workflow={app.workflow} staffId={session.staffId} />
+          {tab !== "intelligence" && <FinancialIntelligenceCard s={fi} href={tabHref("intelligence")} />}
           {myTask && (retailPanel ?? <ActionPanel c={c} task={myTask} data={data} doneHref={doneHref} />)}
           <ClosingDocuments appId={app.id} canEdit={isInitiator || roles.includes("SUPER_ADMIN")} canSign={!!myTask && ["OFFER_PREPARATION", "DISBURSEMENT_CORRECTION"].includes(myTask.stage)} link={link} />
           <RecordsCard appId={app.id} recordsStatus={app.records_status ?? null} roles={roles} />

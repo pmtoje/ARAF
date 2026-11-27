@@ -62,19 +62,61 @@ export function BusinessDecisionForm({ hidden, action, label, visitRequired, rmP
 export function FinalAssessmentForm({
   applicationId,
   defaults,
+  verified,
 }: {
   applicationId: string;
-  defaults: { incomeBasis: string; annualInflow?: string; fromAnnual?: boolean; recognitionPercent?: string; principal: string; tenor: string; statementFrom: string; statementTo: string; obligations: { lender: string; monthly: string }[]; denominatorLabel: string; capApplies: boolean };
+  defaults: { incomeBasis: string; annualInflow?: string; fromAnnual?: boolean; recognitionPercent?: string; principal: string; tenor: string; statementFrom: string; statementTo: string; obligations: { lender: string; monthly: string }[]; denominatorLabel: string; capApplies: boolean; incomeBasisNote?: string };
+  /** Figures verified by Automatic Statement Analysis. The reviewer confirms them or changes them with a reason; the originals stay on the analysis. */
+  verified?: { version: number; incomeBasis: string; annualInflow: string; obligations: { lender: string; monthly: string }[] | null; recommendedPrincipal: string; testData: boolean; note: string; statementFrom: string; statementTo: string } | null;
 }) {
-  const [income, setIncome] = useState(defaults.incomeBasis);
-  const [annual, setAnnual] = useState(defaults.annualInflow ?? "");
+  const v = verified ?? null;
+  const [income, setIncome] = useState(v ? v.incomeBasis : defaults.incomeBasis);
+  const [annual, setAnnual] = useState(v && defaults.fromAnnual ? v.annualInflow : defaults.annualInflow ?? "");
   const [principal, setPrincipal] = useState(defaults.principal);
-  const [obl, setObl] = useState(defaults.obligations.length ? defaults.obligations : [{ lender: "", monthly: "" }]);
+  const startObl = v?.obligations ?? defaults.obligations;
+  const [obl, setObl] = useState(startObl.length ? startObl : [{ lender: "", monthly: "" }]);
   const [charges, setCharges] = useState<{ label: string; amount: string }[]>([]);
   const [turnover, setTurnover] = useState("");
+  const [userNote, setUserNote] = useState("");
+  const [departReason, setDepartReason] = useState("");
+  const total = (xs: { monthly: string }[]) => xs.reduce((t, x) => t + (Number(x.monthly) || 0), 0);
+  const departed = v
+    ? [
+        defaults.fromAnnual ? (Number(annual) !== Number(v.annualInflow) ? "annual inflow" : "") : Number(income) !== Number(v.incomeBasis) ? "income" : "",
+        total(obl) !== total(v.obligations ?? defaults.obligations) ? "obligations" : "",
+      ].filter(Boolean)
+    : [];
+  const usedRecommended = !!v?.recommendedPrincipal && Number(principal) === Number(v.recommendedPrincipal) && principal !== defaults.principal;
+  const adjustmentNote = v
+    ? [
+        `Figures from Automatic Statement Analysis v${v.version}${v.testData ? " (TEST DATA)" : ""}.`,
+        usedRecommended ? `Principal reduced to the amount supported by the verified figures.` : "",
+        departed.length ? `Changed from the verified ${departed.join(" and ")}: ${departReason.trim()}` : "",
+        userNote.trim(),
+      ]
+        .filter(Boolean)
+        .join(" ")
+    : userNote;
   return (
     <ActionForm action={finalAssessmentAction}>
       <input type="hidden" name="applicationId" value={applicationId} />
+      <input type="hidden" name="adjustmentNote" value={adjustmentNote} />
+      {v && (
+        <div className={`alert ${v.testData ? "alert-warn" : "alert-info"}`} role="note">
+          <span>
+            {v.testData ? <strong>Test data: not a Periculum result. </strong> : null}
+            Pre-filled from Automatic Statement Analysis v{v.version}. Confirm the figures, or change them and give the reason. The verified originals stay on the analysis.
+            {v.recommendedPrincipal && Number(principal) !== Number(v.recommendedPrincipal) && (
+              <>
+                {" "}
+                <button type="button" className="btn btn-sm" onClick={() => setPrincipal(v.recommendedPrincipal)}>
+                  Use the supported amount (₦{Number(v.recommendedPrincipal).toLocaleString("en-NG")})
+                </button>
+              </>
+            )}
+          </span>
+        </div>
+      )}
       <input type="hidden" name="incomeBasis" value={defaults.fromAnnual ? "" : income} />
       <input type="hidden" name="annualInflow" value={defaults.fromAnnual ? annual : ""} />
       <input type="hidden" name="principal" value={principal} />
@@ -94,15 +136,15 @@ export function FinalAssessmentForm({
         )}
         <div className="field">
           <label htmlFor="fa-note">Basis and evidence</label>
-          <input id="fa-note" name="incomeBasisNote" placeholder="e.g. average of 6 months' credits" />
+          <input id="fa-note" name="incomeBasisNote" defaultValue={v?.note ?? defaults.incomeBasisNote ?? ""} placeholder="e.g. average of 6 months' credits" />
         </div>
         <div className="field">
           <label htmlFor="fa-from">Statement period from</label>
-          <input id="fa-from" name="statementFrom" type="date" defaultValue={defaults.statementFrom} required />
+          <input id="fa-from" name="statementFrom" type="date" defaultValue={v?.statementFrom || defaults.statementFrom} required />
         </div>
         <div className="field">
           <label htmlFor="fa-to">Statement period to</label>
-          <input id="fa-to" name="statementTo" type="date" defaultValue={defaults.statementTo} required />
+          <input id="fa-to" name="statementTo" type="date" defaultValue={v?.statementTo || defaults.statementTo} required />
         </div>
         <div className="field">
           <label htmlFor="fa-principal">Principal</label>
@@ -157,9 +199,15 @@ export function FinalAssessmentForm({
           Add charge
         </button>
       </fieldset>
+      {departed.length > 0 && (
+        <div className="field">
+          <label htmlFor="fa-dep">Reason for changing the verified {departed.join(" and ")}</label>
+          <input id="fa-dep" value={departReason} onChange={(e) => setDepartReason(e.target.value)} required minLength={10} placeholder="Name the evidence relied on instead of the statement analysis" />
+        </div>
+      )}
       <div className="field">
-        <label htmlFor="fa-adj">Reason for any change from the initiator&apos;s assessment</label>
-        <input id="fa-adj" name="adjustmentNote" placeholder="Required if you change inflow, obligations, principal or tenor; name the evidence relied on" />
+        <label htmlFor="fa-adj">{v ? "Other notes" : "Reason for any change from the initiator’s assessment"}</label>
+        <input id="fa-adj" value={userNote} onChange={(e) => setUserNote(e.target.value)} placeholder={v ? "Optional" : "Required if you change inflow, obligations, principal or tenor; name the evidence relied on"} />
       </div>
       <div>
         <SubmitButton className="btn btn-dark">Calculate and save final assessment</SubmitButton>

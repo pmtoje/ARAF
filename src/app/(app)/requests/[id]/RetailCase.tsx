@@ -29,6 +29,10 @@ import { formatKobo, koboToNairaString } from "@/server/money";
 import { formatLagos, lagosDate, addDaysToDateString } from "@/server/time";
 import { maskWithLast4 } from "@/server/mask";
 import { UploadPanel } from "@/components/UploadPanel";
+import { currentAnalysis } from "@/server/domain/statement-analysis";
+import { savedIntelligence } from "@/server/domain/financial-intelligence";
+import { savedRecommendation } from "@/server/domain/credit-recommendation";
+import { verifiedDefaults } from "./FinancialIntelligence";
 import { CrmsOkay, GenerateOffer, ReasonButton, RevealIdentifiers, TaskButton } from "./CaseClient";
 import { ContractSubmit, BookFacilityForm, BusinessDecisionForm, DocReview, ExceptionDecision, FinalAssessmentForm, FulfilmentForm, PaymentEventForm, ReasonForm, ServicingForms } from "./RetailClient";
 
@@ -465,6 +469,17 @@ export async function RetailActionPanel({ c, task, doneHref }: { c: Case; task: 
       const credit = rules?.documents.filter((d) => d.stage === "CREDIT" && d.requirement !== "OPTIONAL") ?? [];
       const dsrEx = b.exceptions.find((e: { type: string; status: string }) => e.type === "DSR" && e.status === "APPROVED");
       const benProblems = await beneficiaryRevalidation(db, app, now);
+      const fiA = await currentAnalysis(db, app.id);
+      const fiS = fiA ? { analysis: fiA, statements: [], intelligence: await savedIntelligence(db, fiA.id), recommendation: await savedRecommendation(db, fiA.id), bureau: [], isAnalyst: true, detail: true } : null;
+      const verified = !current && fiS ? verifiedDefaults(fiS) : null;
+      if (fiS?.recommendation)
+        body.push(
+          <p key="fi" className="small" style={{ margin: 0 }}>
+            Automatic Statement Analysis v{fiA!.version}: <strong>{fiS.recommendation.outcomeLabel}</strong>
+            {fiS.recommendation.dsr.percent ? ` · DSR ${fiS.recommendation.dsr.percent}%` : ""}
+            {fiA!.source === "FIXTURE" ? " · test data" : ""} · <Link href={`/requests/${app.id}?tab=intelligence`}>open the analysis</Link>
+          </p>,
+        );
       body.push(
         <ul key="cl" className="checklist">
           <Check ok={!!current && b.final.result === "PASS"}>Final assessment for the current version{finalOut ? `: ${finalOut.result}${finalOut.dsr ? `, DSR ${finalOut.dsr.percent}%` : ""}` : ""}{dsrEx ? " (approved DSR exception on file)" : ""}</Check>
@@ -502,6 +517,7 @@ export async function RetailActionPanel({ c, task, doneHref }: { c: Case; task: 
                 denominatorLabel: rules?.dsr.denominator ? DSR_DENOMINATOR_LABELS[rules.dsr.denominator].toLowerCase() : "income basis",
                 capApplies: !!rules?.principalTurnoverCap.applies,
               }}
+              verified={verified}
             />
           </div>
         </details>,

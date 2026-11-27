@@ -31,6 +31,9 @@ import { getStatement, getTransactions, periculumReadiness, periculumSource, sub
 
 export const CREDIT_ANALYSIS_STAGES = ["FIRST_CREDIT_REVIEW", "CREDIT_CORRECTION", "CX_CREDIT_REVIEW"] as const;
 
+/** Roles that see the full analysis (accounts, transactions, income figures). Others on the request see the summary only. */
+export const CREDIT_DETAIL_ROLES: readonly string[] = ["CREDIT_OFFICER_1", "CREDIT_OFFICER_2", "CREDIT_OFFICER_3", "CREDIT_LEAD_1", "CREDIT_LEAD_2", "CX_CREDIT_REVIEWER", "UNIT_HEAD", "DIVISIONAL_HEAD", "HEAD_OF_UNIT", "SUPER_ADMIN"];
+
 export type AnalysisStatus = "QUEUED" | "PROCESSING" | "PARTIALLY_COMPLETED" | "COMPLETED" | "FAILED" | "REQUIRES_VERIFICATION" | "SUPERSEDED";
 export type StatementStatus = "PENDING" | "SUBMITTING" | "SUBMISSION_UNCERTAIN" | "UPLOADED" | "PROCESSING" | "PROCESSED" | "FAILED" | "REQUIRES_VERIFICATION" | "DUPLICATE" | "REUSED";
 
