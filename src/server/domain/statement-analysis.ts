@@ -26,6 +26,7 @@ import { lockApp } from "./workflow";
 import { notify } from "./notifications";
 import { scheduleBureauChecks } from "./bureau-check";
 import { storeIntelligence } from "./financial-intelligence";
+import { storeRecommendation } from "./credit-recommendation";
 import { getStatement, getTransactions, periculumReadiness, periculumSource, submitStatement, type VendorStatement } from "../integrations/periculum/client";
 
 export const CREDIT_ANALYSIS_STAGES = ["FIRST_CREDIT_REVIEW", "CREDIT_CORRECTION", "CX_CREDIT_REVIEW"] as const;
@@ -289,6 +290,8 @@ async function rollUp(tx: Tx, analysisId: string, now: Date): Promise<AnalysisSt
     if (counts.processed > 0) await scheduleBureauChecks(tx, analysisId, now);
     // Financial intelligence (Phase 3): built from the stored results and saved on the analysis.
     await storeIntelligence(tx, analysisId, now);
+    // Credit recommendation (Phase 4): the approved affordability engine on the verified figures; decision support only.
+    await storeRecommendation(tx, analysisId, now);
     const ref = (await tx.query<{ ref: string }>("SELECT ref FROM applications WHERE id = $1", [a.application_id])).rows[0]?.ref ?? "";
     const words: Record<string, string> = {
       COMPLETED: `All ${counts.total} statement(s) were analysed.`,
