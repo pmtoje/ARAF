@@ -204,165 +204,169 @@ class Doc {
   }
 }
 
-/** Page 1: the decision page. */
+/** Page 1: the decision page (Figma: "PDF · Page 1 · Decision page"). */
 function cover(d: Doc, r: ReportData) {
   const p = d.page;
   const rec = r.recommendation;
   const risk = r.risk;
-  // Charcoal band
-  const bandH = 118;
-  p.drawRectangle({ x: 0, y: A4[1] - 5 - bandH, width: A4[0], height: bandH, color: C.charcoal });
+  const X = 36; // page margin on the cover, as in the design
+  const CW = A4[0] - 2 * X;
+
+  // ── Cover band: eyebrow + logo plate, customer name, product line, analysis line
+  const nameSize = d.fitSize(r.customerName, CW, 23, 15);
+  const nameLines = d.wrap(r.customerName, nameSize, CW, d.b).slice(0, 2);
+  const bandH = 26 + 26 + 10 + nameLines.length * (nameSize + 4) + 16 + 14 + 22;
+  const bandTop = A4[1] - 5;
+  p.drawRectangle({ x: 0, y: bandTop - bandH, width: A4[0], height: bandH, color: C.charcoal });
+  let y = bandTop - 26;
+  d.text("CREDIT RISK REPORT", X, y - 6, 8.5, d.b, C.yellow, 1.5);
   if (d.logo) {
-    const lh = 24;
+    const lh = 20;
     const lw = (d.logo.width / d.logo.height) * lh;
-    d.round(A4[0] - M - lw - 24, A4[1] - 54, lw + 24, 36, 6, C.white);
-    d.logoAt(A4[0] - M - 12, A4[1] - 24, lh);
+    d.round(A4[0] - X - lw - 24, y - 14, lw + 24, lh + 14, 6, C.white);
+    d.logoAt(A4[0] - X - 12, y + 13, lh);
   }
-  d.text("CREDIT RISK REPORT", M, A4[1] - 36, 8.5, d.b, C.yellow, 1.6);
-  const nameSize = d.fitSize(r.customerName, W - 150, 22, 14);
-  d.text(d.fit(r.customerName, nameSize, W - 150, d.b), M, A4[1] - 64, nameSize, d.b, C.white);
-  d.text(d.fit(`${r.product} · ${r.customerType} · ${r.ref}`, 10, W - 20), M, A4[1] - 84, 10, d.f, C.charcoalSoft);
-  d.text(`Automatic Statement Analysis v${r.analysis.version} · ${r.analysis.source === "FIXTURE" ? "simulated test data" : `Periculum Insights (${r.analysis.vendor_environment})`} · ${formatLagos(r.analysis.completed_at ?? r.analysis.created_at)}`, M, A4[1] - 104, 8, d.f, C.charcoalSoft);
-  d.y = A4[1] - 5 - bandH - 14;
+  y -= 36;
+  for (const l of nameLines) {
+    d.text(l, X, y - nameSize + 4, nameSize, d.b, C.white);
+    y -= nameSize + 4;
+  }
+  y -= 10;
+  d.text(d.fit(`${r.product} · ${r.customerType} · ${r.ref}${r.daoCode ? ` · ${r.daoCode}` : ""}`, 10, CW), X, y, 10, d.f, C.charcoalSoft);
+  y -= 15;
+  d.text(
+    d.fit(`Automatic Statement Analysis v${r.analysis.version} · ${r.analysis.source === "FIXTURE" ? "simulated test data" : `Periculum Insights (${r.analysis.vendor_environment})`} · ${formatLagos(r.analysis.completed_at ?? r.analysis.created_at)}`, 8, CW),
+    X,
+    y,
+    8,
+    d.f,
+    C.faint,
+  );
+  d.y = bandTop - bandH - 16;
 
   if (r.analysis.source === "FIXTURE") {
-    d.round(M, d.y - 20, W, 20, 4, LEVEL.HIGH.bg);
-    d.text("TEST DATA: produced by ARAF's simulated Periculum service, not by Periculum. Not for a credit decision.", M + 10, d.y - 13.5, 8, d.b, LEVEL.HIGH.fg);
+    d.round(X, d.y - 20, CW, 20, 5, LEVEL.HIGH.bg);
+    d.text("TEST DATA: produced by ARAF's simulated Periculum service, not by Periculum. Not for a credit decision.", X + 10, d.y - 13.5, 8, d.b, LEVEL.HIGH.fg);
     d.y -= 30;
   }
 
-  // Facts strip
-  const facts: [string, string][] = [
-    ["APPLICATION", r.ref],
-    ["DAO CODE", r.daoCode || "—"],
-    ["REQUESTED", rec ? `${money(rec.requested.principalKobo, true)} / ${rec.requested.tenorMonths ?? "—"} mo` : "—"],
-    ["SEEDFI", rec?.seedfi ? `${rec.seedfi.outcome ?? "—"}${rec.seedfi.score !== null ? ` · ${rec.seedfi.score}` : ""}` : "Not on record"],
-  ];
-  const fw = W / facts.length;
-  d.round(M, d.y - 40, W, 40, 6, C.panel);
-  facts.forEach(([k, v], i) => {
-    d.text(k, M + 12 + i * fw, d.y - 15, 6.5, d.b, C.muted, 0.8);
-    d.text(d.fit(v, 9.5, fw - 18, d.b), M + 12 + i * fw, d.y - 29, 9.5, d.b, C.ink);
-    if (i) p.drawLine({ start: { x: M + i * fw, y: d.y - 8 }, end: { x: M + i * fw, y: d.y - 32 }, thickness: 0.5, color: C.line });
-  });
-  d.y -= 54;
-
-  // Risk grade panel
-  const ph = 92;
-  d.round(M, d.y - ph, W, ph, 8, C.white, C.line);
+  // ── Risk hero: grade card + headline, counts and the five categories
+  const gw = 150;
+  const sx = X + gw + 18;
+  const sw = CW - gw - 36;
+  const head = d.wrap(risk?.headline ?? "Risk profile unavailable.", 11, sw, d.b).slice(0, 3);
+  const cats = risk?.categories ?? [];
+  const heroH = Math.max(120, 16 + head.length * 15 + 8 + 18 + 8 + cats.length * 19 + 12);
+  d.round(X, d.y - heroH, CW, heroH, 12, C.white, C.line);
   const g = GRADE[risk?.grade ?? "HIGH"];
-  d.round(M, d.y - ph, 150, ph, 8, g.bg);
-  p.drawRectangle({ x: M + 142, y: d.y - ph, width: 8, height: ph, color: g.bg });
-  d.text("RISK GRADE", M + 14, d.y - 22, 7, d.b, g.fg, 1.2);
-  const gw = risk ? risk.gradeLabel.replace(" risk", "").toUpperCase() : "N/A";
-  d.text(gw, M + 14, d.y - 52, d.fitSize(gw, 122, 24, 12), d.b, g.fg);
-  d.text(risk ? `score ${risk.score} · ${risk.indicators.length} indicators` : "No risk profile", M + 14, d.y - 72, 7.5, d.f, g.fg);
-  const hx = M + 166;
-  const hw = W - 180;
-  let hy = d.y - 20;
-  for (const l of d.wrap(risk?.headline ?? "Risk profile unavailable.", 11, hw, d.b).slice(0, 2)) {
-    d.text(l, hx, hy, 11, d.b, C.ink);
+  d.round(X, d.y - heroH, gw, heroH, 12, g.bg);
+  p.drawRectangle({ x: X + gw - 12, y: d.y - heroH, width: 12, height: heroH, color: g.bg });
+  d.text("RISK GRADE", X + 18, d.y - 24, 7.5, d.b, g.fg, 1.4);
+  const word = risk ? risk.gradeLabel.replace(/ risk$/, "") : "N/A";
+  d.text(word, X + 18, d.y - 54, d.fitSize(word, gw - 36, 26, 14), d.b, g.fg);
+  d.text(risk ? `Score ${risk.score} · ${risk.indicators.length} indicators` : "", X + 18, d.y - 70, 8, d.f, g.fg);
+  let hy = d.y - 16;
+  for (const l of head) {
+    d.text(l, sx, hy - 11, 11, d.b, C.ink);
     hy -= 15;
   }
-  if (rec) {
-    const line = `Recommendation: ${rec.outcomeLabel}${rec.dsr.percent ? ` · DSR ${Number(rec.dsr.percent).toFixed(2)}% against ${rec.dsr.thresholdPercent}%` : ""}`;
-    for (const l of d.wrap(line, 8.5, hw).slice(0, 2)) {
-      d.text(l, hx, hy - 2, 8.5, d.f, C.muted);
-      hy -= 11;
+  hy -= 8;
+  if (risk) {
+    let px = sx;
+    px += d.pill(`${risk.counts.high} HIGH`, px, hy - 9, LEVEL.HIGH.fg, LEVEL.HIGH.bg, 7.5) + 6;
+    px += d.pill(`${risk.counts.watch} WATCH`, px, hy - 9, LEVEL.WATCH.fg, LEVEL.WATCH.bg, 7.5) + 6;
+    px += d.pill(`${risk.counts.low} LOW`, px, hy - 9, LEVEL.LOW.fg, LEVEL.LOW.bg, 7.5) + 6;
+    if (risk.counts.notReported) d.pill(`${risk.counts.notReported} NOT REPORTED`, px, hy - 9, LEVEL.NOT_REPORTED.fg, LEVEL.NOT_REPORTED.bg, 7.5);
+    hy -= 26;
+    for (const c of cats) {
+      d.text(c.label, sx, hy - 9, 9, d.f, C.ink);
+      const lv = LEVEL[c.level];
+      const w = d.b.widthOfTextAtSize(lv.label, 7.5) + 10;
+      d.pill(lv.label, sx + sw - w, hy - 9, lv.fg, lv.bg, 7.5);
+      hy -= 19;
     }
   }
-  if (risk) {
-    let px = hx;
-    const py = d.y - ph + 18;
-    px += d.pill(`${risk.counts.high} HIGH`, px, py, LEVEL.HIGH.fg, LEVEL.HIGH.bg, 7.5) + 6;
-    px += d.pill(`${risk.counts.watch} WATCH`, px, py, LEVEL.WATCH.fg, LEVEL.WATCH.bg, 7.5) + 6;
-    px += d.pill(`${risk.counts.low} LOW`, px, py, LEVEL.LOW.fg, LEVEL.LOW.bg, 7.5) + 6;
-    if (risk.counts.notReported) d.pill(`${risk.counts.notReported} NOT REPORTED`, px, py, LEVEL.NOT_REPORTED.fg, LEVEL.NOT_REPORTED.bg, 7.5);
-  }
-  d.y -= ph + 14;
+  d.y -= heroH + 14;
 
-  // KPI tiles
+  // ── Key figures: four bordered tiles
   const tiles: [string, string, string][] = [
     ["REQUESTED", money(rec?.requested.principalKobo, true), rec?.requested.tenorMonths ? `over ${rec.requested.tenorMonths} months` : ""],
-    ["INDICATIVE ELIGIBLE", money(rec?.maxEligiblePrincipalKobo, true), "at the approved DSR"],
+    ["INDICATIVE ELIGIBLE", money(rec?.maxEligiblePrincipalKobo, true), rec?.dsr.thresholdPercent ? `at the ${rec.dsr.thresholdPercent}% DSR` : "at the approved DSR"],
     ["RECOMMENDED", money(rec?.recommendedPrincipalKobo, true), rec?.outcomeLabel ?? ""],
-    ["MONTHLY CAPACITY", money(rec?.availableCapacityKobo, true), "available for this facility"],
+    ["MONTHLY CAPACITY", money(rec?.availableCapacityKobo, true), "available"],
   ];
   const gap = 8;
-  const tw = (W - gap * 3) / 4;
+  const tw = (CW - gap * 3) / 4;
   tiles.forEach(([k, v, s], i) => {
-    const x = M + i * (tw + gap);
-    d.round(x, d.y - 58, tw, 58, 6, C.panel);
-    p.drawRectangle({ x, y: d.y - 58, width: 3, height: 58, color: i === 2 ? C.yellow : C.line });
-    d.text(k, x + 11, d.y - 16, 6.5, d.b, C.muted, 0.6);
-    d.text(d.fit(v, 13, tw - 18, d.b), x + 11, d.y - 35, 13, d.b, C.ink);
-    d.text(d.fit(s, 7, tw - 18), x + 11, d.y - 49, 7, d.f, C.muted);
+    const x = X + i * (tw + gap);
+    d.round(x, d.y - 56, tw, 56, 10, C.white, C.line);
+    d.text(k, x + 12, d.y - 16, 7, d.b, C.muted, 0.5);
+    d.text(d.fit(v, d.fitSize(v, tw - 24, 15, 10), tw - 24, d.b), x + 12, d.y - 35, d.fitSize(v, tw - 24, 15, 10), d.b, C.ink);
+    d.text(d.fit(s, 7.5, tw - 24), x + 12, d.y - 48, 7.5, d.f, C.muted);
   });
-  d.y -= 74;
+  d.y -= 70;
 
-  // DSR gauge
+  // ── DSR gauge against the limit
   if (rec?.dsr.percent && rec.dsr.thresholdPercent) {
     const dsr = Number(rec.dsr.percent);
     const lim = Number(rec.dsr.thresholdPercent);
     const max = Math.max(50, Math.ceil((Math.max(dsr, lim) * 1.25) / 10) * 10);
-    d.text("Debt service ratio", M, d.y - 10, 10, d.b);
-    d.right(`${dsr.toFixed(2)}% of ${lim}% limit`, A4[0] - M, d.y - 10, 10, d.b, rec.dsr.pass === false ? LEVEL.HIGH.fg : C.ink);
-    const by = d.y - 34;
-    d.round(M, by, W, 12, 6, C.panel);
-    const fill = Math.max(12, Math.min(W, (dsr / max) * W));
-    const col = rec.dsr.pass === false ? LEVEL.HIGH.fg : dsr > lim * 0.8 ? hex("#C2620A") : hex("#1E7B34");
-    d.round(M, by, fill, 12, 6, col);
-    const lx = M + (lim / max) * W;
-    p.drawLine({ start: { x: lx, y: by - 5 }, end: { x: lx, y: by + 17 }, thickness: 1.6, color: C.charcoal });
-    d.text(`${lim}% limit`, lx - 16, by - 14, 7, d.b, C.charcoal);
-    d.text("0%", M, by - 14, 7, d.f, C.muted);
-    d.right(`${max}%`, A4[0] - M, by - 14, 7, d.f, C.muted);
+    const col = rec.dsr.pass === false ? LEVEL.HIGH.fg : dsr > lim * 0.8 ? hex("#C2620A") : LEVEL.LOW.fg;
+    d.text("Debt service ratio", X, d.y - 10, 10.5, d.b);
+    d.right(`${dsr.toFixed(2)}% of ${lim}% limit`, A4[0] - X, d.y - 10, 10.5, d.b, col);
+    const by = d.y - 32;
+    d.round(X, by, CW, 12, 6, hex("#ECECEE"));
+    d.round(X, by, Math.max(12, Math.min(CW, (dsr / max) * CW)), 12, 6, col);
+    const lx = X + (lim / max) * CW;
+    p.drawRectangle({ x: lx - 1, y: by, width: 2, height: 12, color: C.ink });
+    d.text("0%", X, by - 12, 7.5, d.f, C.muted);
+    d.text(`${lim}% limit`, lx - d.b.widthOfTextAtSize(`${lim}% limit`, 7.5) / 2, by - 12, 7.5, d.b, C.ink);
+    d.right(`${max}%`, A4[0] - X, by - 12, 7.5, d.f, C.muted);
     d.text(
-      d.fit(`Proposed ${money(rec.proposedMonthlyKobo)} + existing ${money(rec.obligations.usedMonthlyKobo)} a month against ${rec.income.basis.toLowerCase()} of ${money(rec.income.monthlyKobo)}.`, 8, W),
-      M,
-      by - 28,
-      8,
+      d.fit(`Proposed ${money(rec.proposedMonthlyKobo, true)} + existing ${money(rec.obligations.usedMonthlyKobo, true)} a month against ${rec.income.basis.toLowerCase()} of ${money(rec.income.monthlyKobo, true)}.`, 8.5, CW),
+      X,
+      by - 26,
+      8.5,
       d.f,
       C.muted,
     );
-    d.y = by - 42;
+    d.y = by - 40;
   }
 
-  // Recommendation and commentary
+  // ── Automated recommendation (soft gold box)
   if (rec) {
-    const lines = rec.commentary.flatMap((c) => d.wrap(c, 8.5, W - 24));
-    const shown = lines.slice(0, 7);
-    const h = 30 + shown.length * 12;
-    d.round(M, d.y - h, W, h, 6, C.white, C.line);
-    d.text("Automated recommendation", M + 12, d.y - 17, 9.5, d.b);
-    d.right(rec.outcomeLabel, A4[0] - M - 12, d.y - 17, 9.5, d.b, rec.outcome === "WITHIN_CAPACITY" ? hex("#1E7B34") : rec.outcome === "EXCEEDS_DSR" || rec.outcome === "UNABLE_TO_ASSESS" ? LEVEL.HIGH.fg : hex("#9A5B00"));
-    shown.forEach((l, i) => d.text(l, M + 12, d.y - 33 - i * 12, 8.5, d.f, C.ink));
+    // The first two commentary lines (statements analysed, income) are already on this page.
+    const lines = (rec.commentary.length > 3 ? rec.commentary.slice(2) : rec.commentary).flatMap((c) => d.wrap(c, 9, CW - 32)).slice(0, 5);
+    const h = 34 + lines.length * 12.5;
+    d.round(X, d.y - h, CW, h, 10, hex("#FFF6D9"));
+    d.text("Automated recommendation", X + 16, d.y - 19, 10.5, d.b);
+    const oc = rec.outcome === "WITHIN_CAPACITY" ? LEVEL.LOW.fg : rec.outcome === "EXCEEDS_DSR" || rec.outcome === "UNABLE_TO_ASSESS" ? LEVEL.HIGH.fg : hex("#7A5900");
+    d.right(rec.outcomeLabel, A4[0] - X - 16, d.y - 19, 10.5, d.b, oc);
+    lines.forEach((l, i) => d.text(l, X + 16, d.y - 36 - i * 12.5, 9, d.f, C.ink));
     d.y -= h + 12;
   }
 
-  // Key risks and mitigants
+  // ── Key risks and mitigants
   if (risk) {
-    const colW = (W - 12) / 2;
-    const block = (x: number, title: string, items: string[], tone: { fg: RGB; bg: RGB }) => {
-      let yy = d.y - 16;
-      d.text(title, x + 10, yy, 9, d.b, tone.fg);
-      yy -= 14;
-      for (const it of items.slice(0, 5)) {
-        const ls = d.wrap(it, 7.8, colW - 26).slice(0, 2);
-        p.drawCircle({ x: x + 13, y: yy + 2.6, size: 1.8, color: tone.fg });
-        ls.forEach((l, i) => d.text(l, x + 20, yy - i * 10, 7.8, d.f, C.ink));
-        yy -= ls.length * 10 + 4;
-      }
-      return d.y - yy;
-    };
-    const need = (items: string[]) => 34 + items.slice(0, 5).reduce((t, it) => t + Math.min(2, d.wrap(it, 7.8, colW - 26).length) * 10 + 4, 0);
+    const colW = (CW - 10) / 2;
     const kr = risk.keyRisks.length ? risk.keyRisks : ["No high or watch signals."];
     const mg = risk.mitigants.length ? risk.mitigants : ["None identified."];
-    const space = Math.min(d.y - 60, Math.max(need(kr), need(mg)));
-    d.round(M, d.y - space, colW, space, 6, LEVEL.HIGH.bg);
-    d.round(M + colW + 12, d.y - space, colW, space, 6, LEVEL.LOW.bg);
-    block(M, "Key risks", kr, LEVEL.HIGH);
-    block(M + colW + 12, "Mitigants", mg, LEVEL.LOW);
+    const lines = (items: string[]) => items.slice(0, 5).map((it) => d.wrap(it, 8.5, colW - 34).slice(0, 2));
+    const need = (items: string[]) => 46 + lines(items).reduce((t, ls) => t + ls.length * 11.5 + 4, 0);
+    const space = Math.min(d.y - 52, Math.max(need(kr), need(mg)));
+    const block = (x: number, title: string, items: string[], tone: { fg: RGB; bg: RGB }) => {
+      d.round(x, d.y - space, colW, space, 10, tone.bg);
+      d.text(title, x + 14, d.y - 20, 10, d.b, tone.fg);
+      let yy = d.y - 36;
+      for (const ls of lines(items)) {
+        if (yy - ls.length * 11.5 < d.y - space + 6) break;
+        d.text("•", x + 14, yy, 8.5, d.f, C.ink);
+        ls.forEach((l, i) => d.text(l, x + 24, yy - i * 11.5, 8.5, d.f, C.ink));
+        yy -= ls.length * 11.5 + 4;
+      }
+    };
+    block(X, "Key risks", kr, LEVEL.HIGH);
+    block(X + colW + 10, "Mitigants", mg, LEVEL.LOW);
     d.y -= space + 6;
   }
 }
@@ -446,7 +450,7 @@ export async function buildFinancialReportPdf(r: ReportData): Promise<Buffer> {
   } catch {
     logo = null;
   }
-  const d = new Doc(pdf, f, b, logo, `The Alternative Bank · ARAF · ${r.ref} · analysis v${r.analysis.version} · ${REPORT_VERSION} · Confidential`);
+  const d = new Doc(pdf, f, b, logo, `The Alternative Bank · ARAF · ${r.ref} · analysis v${r.analysis.version} · Confidential · Decision support, not a credit approval`);
   d.newPage(false);
   cover(d, r);
 

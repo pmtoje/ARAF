@@ -1,0 +1,95 @@
+/* Credit Risk Report (Figma: "App · Financial intelligence · Credit Risk Report"). Theme variables only, so light and dark both work. */
+.report { display: flex; flex-direction: column; gap: 16px; container-type: inline-size; container-name: crr; }
+
+.header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.headerText { flex: 1 1 320px; min-width: 0; }
+.eyebrow { margin: 0 0 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+.title { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 26px; letter-spacing: -0.01em; color: var(--ink); }
+.meta { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.hero { display: flex; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; background: var(--surface); }
+.grade { flex: 0 0 240px; padding: 22px 24px; display: flex; flex-direction: column; gap: 6px; }
+.gradeLOW { background: var(--success); color: #ffffff; }
+.gradeMODERATE { background: var(--action, #ffc928); color: #1c1d20; }
+.gradeELEVATED { background: #c2620a; color: #ffffff; }
+.gradeHIGH { background: var(--danger); color: #ffffff; }
+.gradeLabel { margin: 0; font-size: 11px; font-weight: 700; letter-spacing: 0.14em; }
+.gradeWord { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 38px; line-height: 1.05; }
+.gradeScore { margin: 0; font-size: 12px; opacity: 0.85; }
+.counts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.summary { flex: 1; min-width: 0; padding: 22px 24px; display: flex; flex-direction: column; gap: 14px; }
+.headline { margin: 0; font-size: 16px; line-height: 1.45; font-weight: 600; color: var(--ink); }
+.cats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+.cat { background: var(--surface-2); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.catName { font-size: 12.5px; font-weight: 600; color: var(--ink); }
+.catNote { font-size: 11.5px; color: var(--muted); line-height: 1.35; }
+
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; }
+.pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.pillHIGH { color: var(--danger); background: var(--danger-bg); }
+.pillWATCH { color: var(--warn); background: var(--warn-bg); }
+.pillLOW { color: var(--success); background: var(--success-bg); }
+.pillNOT_REPORTED { color: var(--muted); background: var(--surface-3); }
+
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.kpi { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; background: var(--surface); min-width: 0; }
+.kpiLabel { margin: 0; font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.kpiValue { margin: 4px 0 2px; font-family: var(--font-figure, var(--font-display)); font-weight: 800; font-size: clamp(16px, 2.7cqi, 22px); letter-spacing: -0.02em; color: var(--ink); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.kpiHint { margin: 0; font-size: 11.5px; color: var(--muted); }
+
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.card { border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; background: var(--surface); display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.cardHead { display: flex; align-items: baseline; gap: 8px; justify-content: space-between; flex-wrap: wrap; }
+.cardTitle { margin: 0; font-family: var(--font-display); font-weight: 700; font-size: 16px; color: var(--ink); }
+.dsrValue { font-family: var(--font-figure, var(--font-display)); font-weight: 800; font-size: 22px; }
+.track { position: relative; height: 14px; border-radius: 7px; background: var(--surface-3); overflow: hidden; }
+.bar { position: absolute; inset: 0 auto 0 0; border-radius: 7px; }
+.limit { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--ink); }
+.scale { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: -6px; }
+.note { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+.rec { background: var(--accent-soft); border-color: transparent; }
+.recOutcome { font-size: 12px; font-weight: 700; color: var(--accent); }
+.recText { margin: 0; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
+
+.list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 1.45; color: var(--ink); }
+.risks { border-radius: 14px; padding: 16px 20px; background: var(--danger-bg); display: flex; flex-direction: column; gap: 8px; }
+.mitigants { border-radius: 14px; padding: 16px 20px; background: var(--success-bg); display: flex; flex-direction: column; gap: 8px; }
+.risksTitle { margin: 0; font-family: var(--font-display); font-weight: 700; font-size: 15px; color: var(--danger); }
+.mitigantsTitle { margin: 0; font-family: var(--font-display); font-weight: 700; font-size: 15px; color: var(--success); }
+
+.indicators { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); overflow: hidden; }
+.indicatorsHead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding: 18px 24px 12px; }
+.group { padding: 8px 24px 6px; background: var(--surface-2); font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.row { display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 12px 24px; border-top: 1px solid var(--line); }
+.rowLevel { display: flex; justify-content: center; }
+.rowLabel { margin: 0; font-size: 13px; font-weight: 600; color: var(--ink); }
+.rowEvidence { margin: 2px 0 0; font-size: 11.5px; color: var(--muted); line-height: 1.4; overflow-wrap: anywhere; }
+.rowValue { font-family: var(--font-figure, var(--font-display)); font-weight: 700; font-size: 13px; color: var(--ink); text-align: right; }
+.foot { padding: 10px 24px 14px; font-size: 11px; color: var(--muted); border-top: 1px solid var(--line); }
+
+/* The report sits in the request page's main column, so it responds to its own width. */
+@container crr (max-width: 860px) {
+  .grade { flex-basis: 190px; padding: 20px; }
+  .gradeWord { font-size: 30px; }
+  .cats { grid-template-columns: minmax(0, 1fr); gap: 0; background: var(--surface-2); border-radius: 10px; padding: 4px 12px; }
+  .cat { flex-direction: row; align-items: center; gap: 10px; background: none; border-radius: 0; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .cat:last-child { border-bottom: none; }
+  .catName { flex: 0 0 92px; }
+  .catNote { flex: 1; order: 3; text-align: right; }
+}
+@container crr (max-width: 640px) {
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .two { grid-template-columns: minmax(0, 1fr); }
+  .hero { flex-direction: column; }
+  .grade { flex-basis: auto; }
+  .catNote { display: none; }
+  .row { grid-template-columns: minmax(0, 1fr) auto; }
+  .rowLevel { grid-column: 1 / -1; justify-content: flex-start; }
+}
+
+/* Pills on the coloured grade panel keep light-theme colours in every theme so they stay legible. */
+.grade .pillHIGH { color: #b42318; background: #fdeceb; }
+.grade .pillWATCH { color: #87570a; background: #fdf3dc; }
+.grade .pillLOW { color: #1b6b44; background: #e8f4ed; }
+.grade .pillNOT_REPORTED { color: #3b3c42; background: #ececee; }

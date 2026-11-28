@@ -10,6 +10,7 @@ import { periculumReadiness } from "@/server/integrations/periculum/client";
 import { formatKobo, koboToNairaString } from "@/server/money";
 import { formatLagos } from "@/server/time";
 import { AutoRefresh, ManualAssessmentRequest, RetryStatements, StartAnalysis, WhatIf } from "./FiClient";
+import rs from "./risk-report.module.css";
 import { analysisFreshness, reviewsFor, type Freshness, type ReviewRow } from "@/server/domain/fi-governance";
 import { REPORT_CATEGORY } from "@/server/domain/fi-report";
 import { CATEGORY_LABELS, riskFor, type RiskLevel, type RiskProfile } from "@/server/domain/fi-risk";
@@ -208,100 +209,181 @@ function TrendChart({ fi }: { fi: FinancialIntelligence }) {
   );
 }
 
-const LEVEL_STYLE: Record<RiskLevel, { badge: string; label: string }> = {
-  HIGH: { badge: "badge-red", label: "High" },
-  WATCH: { badge: "badge-warn", label: "Watch" },
-  LOW: { badge: "badge-green", label: "Low" },
-  NOT_REPORTED: { badge: "", label: "Not reported" },
-};
 const GRADE_BADGE: Record<RiskProfile["grade"], string> = { LOW: "badge-green", MODERATE: "badge-yellow", ELEVATED: "badge-warn", HIGH: "badge-red" };
 
-/** Credit Risk Report: grade, key risks and every indicator with its evidence and source. */
-function RiskReport({ risk }: { risk: RiskProfile }) {
-  const cats = Object.keys(CATEGORY_LABELS) as (keyof typeof CATEGORY_LABELS)[];
+const CAT_SHORT: Record<string, string> = { AFFORDABILITY: "Affordability", CONDUCT: "Conduct", STABILITY: "Stability", INTEGRITY: "Integrity", EXTERNAL: "Bureau" };
+const LEVEL_TEXT: Record<RiskLevel, string> = { HIGH: "High", WATCH: "Watch", LOW: "Low", NOT_REPORTED: "Not reported" };
+
+function Pill({ level, children }: { level: RiskLevel; children?: React.ReactNode }) {
+  return <span className={`${rs.pill} ${rs[`pill${level}`]}`}>{children ?? LEVEL_TEXT[level]}</span>;
+}
+
+/** Credit Risk Report, as designed in Figma ("App · Financial intelligence · Credit Risk Report"). */
+function RiskReportView({ c, a, s, r, risk, link, canRerun }: { c: Case; a: AnalysisRow; s: FiState; r: Recommendation; risk: RiskProfile; link: Link; canRerun: boolean }) {
+  const report = (s.reports ?? []).find((d) => !d.superseded_at);
+  const fi = s.intelligence;
+  const dsr = r.dsr.percent ? Number(r.dsr.percent) : null;
+  const lim = r.dsr.thresholdPercent ? Number(r.dsr.thresholdPercent) : null;
+  const max = dsr !== null && lim !== null ? Math.max(50, Math.ceil((Math.max(dsr, lim) * 1.25) / 10) * 10) : 50;
+  const dsrColor = r.dsr.pass === false ? "var(--danger)" : dsr !== null && lim !== null && dsr > lim * 0.8 ? "#c2620a" : "var(--success)";
+  const commentary = r.commentary.length > 3 ? r.commentary.slice(2) : r.commentary;
+  const groups = (Object.keys(CATEGORY_LABELS) as (keyof typeof CATEGORY_LABELS)[]).map((k) => ({ k, items: risk.indicators.filter((i) => i.category === k) })).filter((g) => g.items.length);
   return (
-    <div className="card stack" aria-labelledby="h-risk">
-      <div className="row" style={{ justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
-        <h2 id="h-risk" style={{ margin: 0 }}>
-          Credit Risk Report
-        </h2>
-        <span className={`badge ${GRADE_BADGE[risk.grade]}`} style={{ fontSize: 13, padding: "4px 12px" }}>
-          {risk.gradeLabel}
-        </span>
-      </div>
-      <p style={{ margin: 0 }}>{risk.headline}</p>
-      <div className="row small" style={{ gap: 8, flexWrap: "wrap" }}>
-        <span className="badge badge-red">{risk.counts.high} high</span>
-        <span className="badge badge-warn">{risk.counts.watch} watch</span>
-        <span className="badge badge-green">{risk.counts.low} low</span>
-        {risk.counts.notReported > 0 && <span className="badge">{risk.counts.notReported} not reported</span>}
-      </div>
-      {risk.keyRisks.length > 0 && (
-        <div>
-          <p className="eyebrow" style={{ marginBottom: 4 }}>
-            Key risks
+    <section className={rs.report} aria-labelledby="crr-title">
+      <div className={rs.header}>
+        <div className={rs.headerText}>
+          <p className={rs.eyebrow}>Financial intelligence · {c.app.ref}</p>
+          <h2 id="crr-title" className={rs.title}>
+            Credit Risk Report
+          </h2>
+          <p className={rs.meta}>
+            Automatic Statement Analysis v{a.version} · {a.source === "FIXTURE" ? "simulated test data" : `Periculum Insights (${a.vendor_environment})`}
+            {a.completed_at ? ` · completed ${formatLagos(a.completed_at)}` : ""}
+            {fi ? ` · ${fi.statementsAnalysed} statement${fi.statementsAnalysed === 1 ? "" : "s"}, ${fi.uniqueAccounts} account${fi.uniqueAccounts === 1 ? "" : "s"}` : ""}
           </p>
-          <ul className="small" style={{ margin: 0 }}>
-            {risk.keyRisks.map((k) => (
-              <li key={k}>{k}</li>
-            ))}
-          </ul>
         </div>
-      )}
-      {risk.mitigants.length > 0 && (
-        <div>
-          <p className="eyebrow" style={{ marginBottom: 4 }}>
-            Mitigants
+        <div className={rs.actions}>
+          {canRerun && (
+            <a className="btn" href="#run-again">
+              Run again
+            </a>
+          )}
+          {report && (
+            <a className="btn btn-primary" href={link(report.id, "download")}>
+              Download PDF
+            </a>
+          )}
+        </div>
+      </div>
+
+      <div className={rs.hero}>
+        <div className={`${rs.grade} ${rs[`grade${risk.grade}`]}`}>
+          <p className={rs.gradeLabel}>RISK GRADE</p>
+          <p className={rs.gradeWord}>{risk.gradeLabel.replace(/ risk$/, "")}</p>
+          <p className={rs.gradeScore}>
+            Score {risk.score} · {risk.indicators.length} indicators
           </p>
-          <ul className="small" style={{ margin: 0 }}>
-            {risk.mitigants.map((k) => (
-              <li key={k}>{k}</li>
-            ))}
-          </ul>
+          <div className={rs.counts}>
+            <Pill level="HIGH">{risk.counts.high} high</Pill>
+            <Pill level="WATCH">{risk.counts.watch} watch</Pill>
+            <Pill level="LOW">{risk.counts.low} low</Pill>
+            {risk.counts.notReported > 0 && <Pill level="NOT_REPORTED">{risk.counts.notReported} not reported</Pill>}
+          </div>
         </div>
-      )}
-      <details>
-        <summary className="small" style={{ cursor: "pointer", fontWeight: 700 }}>
-          All {risk.indicators.length} risk indicators
-        </summary>
-        {cats.map((cat) => {
-          const items = risk.indicators.filter((i) => i.category === cat);
-          if (!items.length) return null;
-          return (
-            <div key={cat} style={{ marginTop: 10 }}>
-              <p className="eyebrow" style={{ margin: "0 0 4px" }}>
-                {CATEGORY_LABELS[cat]}
-              </p>
-              <div className="table-wrap">
-                <table className="data">
-                  <tbody>
-                    {items.map((i) => (
-                      <tr key={i.key}>
-                        <td style={{ width: 96 }}>
-                          <span className={`badge ${LEVEL_STYLE[i.level].badge}`}>{LEVEL_STYLE[i.level].label}</span>
-                        </td>
-                        <td>
-                          <strong>{i.label}</strong>
-                          <div className="small muted">
-                            {i.evidence} <span>· {i.source}</span>
-                          </div>
-                        </td>
-                        <td className="num" style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                          {i.value}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+        <div className={rs.summary}>
+          <p className={rs.headline}>{risk.headline}</p>
+          <div className={rs.cats}>
+            {risk.categories.map((x) => (
+              <div key={x.category} className={rs.cat}>
+                <span className={rs.catName}>{CAT_SHORT[x.category] ?? x.label}</span>
+                <Pill level={x.level} />
+                <span className={rs.catNote}>{x.note}</span>
               </div>
-            </div>
-          );
-        })}
-        <p className="small muted" style={{ marginTop: 8 }}>
-          {risk.version} · thresholds: {risk.thresholdsStatus}. Decision support only: the credit decision stays with the approvers and the 30% DSR rule.
-        </p>
-      </details>
-    </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className={rs.kpis}>
+        {(
+          [
+            ["Requested", money(r.requested.principalKobo), r.requested.tenorMonths ? `over ${r.requested.tenorMonths} months` : ""],
+            ["Indicative eligible", money(r.maxEligiblePrincipalKobo), lim !== null ? `at the approved ${lim}% DSR` : "at the approved DSR"],
+            ["Recommended", money(r.recommendedPrincipalKobo), r.outcomeLabel],
+            ["Monthly capacity", money(r.availableCapacityKobo), "available for this facility"],
+          ] as [string, string, string][]
+        ).map(([l, v, h]) => (
+          <div key={l} className={rs.kpi}>
+            <p className={rs.kpiLabel}>{l}</p>
+            <p className={rs.kpiValue}>{v.replace(/\.00$/, "")}</p>
+            <p className={rs.kpiHint}>{h}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className={rs.two}>
+        <div className={rs.card}>
+          <div className={rs.cardHead}>
+            <h3 className={rs.cardTitle}>Debt service ratio</h3>
+            <span className={rs.dsrValue} style={{ color: dsrColor }}>
+              {dsr !== null ? `${dsr.toFixed(2)}%` : "—"}
+            </span>
+          </div>
+          {dsr !== null && lim !== null && (
+            <>
+              <div className={rs.track} role="img" aria-label={`DSR ${dsr.toFixed(2)}% against a ${lim}% limit`}>
+                <div className={rs.bar} style={{ width: `${Math.min(100, (dsr / max) * 100)}%`, background: dsrColor }} />
+                <div className={rs.limit} style={{ left: `${(lim / max) * 100}%` }} />
+              </div>
+              <div className={rs.scale}>
+                <span>0%</span>
+                <strong>{lim}% limit</strong>
+                <span>{max}%</span>
+              </div>
+            </>
+          )}
+          <p className={rs.note}>
+            Proposed {money(r.proposedMonthlyKobo)} + existing {money(r.obligations.usedMonthlyKobo)} a month against {r.income.basis.toLowerCase()} of {money(r.income.monthlyKobo)}.
+            {r.obligations.reconciliationNote ? ` ${r.obligations.reconciliationNote}` : ""}
+          </p>
+        </div>
+        <div className={`${rs.card} ${rs.rec}`}>
+          <div className={rs.cardHead}>
+            <h3 className={rs.cardTitle}>Automated recommendation</h3>
+            <span className={rs.recOutcome}>{r.outcomeLabel}</span>
+          </div>
+          {commentary.map((t, i) => (
+            <p key={i} className={rs.recText}>
+              {t}
+            </p>
+          ))}
+          {r.conditions.map((t) => (
+            <p key={t} className={rs.recText}>
+              <strong>Condition:</strong> {t}
+            </p>
+          ))}
+          <p className={rs.note}>A recommendation, not a credit decision.</p>
+        </div>
+      </div>
+
+      <div className={rs.two}>
+        <div className={rs.risks}>
+          <h3 className={rs.risksTitle}>Key risks</h3>
+          <ul className={rs.list}>{risk.keyRisks.length ? risk.keyRisks.map((k) => <li key={k}>{k}</li>) : <li>No high or watch signals.</li>}</ul>
+        </div>
+        <div className={rs.mitigants}>
+          <h3 className={rs.mitigantsTitle}>Mitigants</h3>
+          <ul className={rs.list}>{risk.mitigants.length ? risk.mitigants.map((k) => <li key={k}>{k}</li>) : <li>None identified.</li>}</ul>
+        </div>
+      </div>
+
+      <div className={rs.indicators}>
+        <div className={rs.indicatorsHead}>
+          <h3 className={rs.cardTitle}>Risk indicators</h3>
+          <span className="small muted">Thresholds {risk.thresholdsStatus.toLowerCase()}</span>
+        </div>
+        {groups.map((g) => (
+          <div key={g.k} role="group" aria-label={CATEGORY_LABELS[g.k]}>
+            <div className={rs.group}>{CATEGORY_LABELS[g.k]}</div>
+            {g.items.map((i) => (
+              <div key={i.key} className={rs.row}>
+                <div className={rs.rowLevel}>
+                  <Pill level={i.level} />
+                </div>
+                <div>
+                  <p className={rs.rowLabel}>{i.label}</p>
+                  <p className={rs.rowEvidence}>
+                    {i.evidence} · {i.source}
+                  </p>
+                </div>
+                <div className={rs.rowValue}>{i.value}</div>
+              </div>
+            ))}
+          </div>
+        ))}
+        <div className={rs.foot}>{risk.version} · decision support only: the credit decision stays with the approvers and the 30% DSR rule.</div>
+      </div>
+    </section>
   );
 }
 
@@ -808,13 +890,15 @@ export async function FinancialIntelligenceTab({ c, s, link }: { c: Case; s: FiS
   const exceptions = [...(s.intelligence?.exceptions ?? []), ...(s.recommendation?.policyFlags ?? [])];
   const r = s.recommendation;
 
+  const showReport = !!(s.risk && r && !running);
   return (
     <div className="stack">
       <SourceBanner a={a} />
       <StaleBanner s={s} />
+      {showReport && <RiskReportView c={c} a={a} s={s} r={r!} risk={s.risk!} link={link} canRerun={s.isAnalyst && ready.ready} />}
       <div className="card stack">
         <div className="row" style={{ justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
-          <h2 style={{ margin: 0 }}>Automatic Statement Analysis</h2>
+          <h2 style={{ margin: 0 }}>{showReport ? "Analysis status" : "Automatic Statement Analysis"}</h2>
           <span className={`badge ${a.status === "COMPLETED" ? "badge-green" : running ? "badge-blue" : "badge-warn"}`}>{STATUS_LABEL[a.status] ?? a.status}</span>
         </div>
         {running && (
@@ -838,7 +922,7 @@ export async function FinancialIntelligenceTab({ c, s, link }: { c: Case; s: FiS
           </details>
         )}
         {s.isAnalyst && ready.ready && !running && (
-          <details>
+          <details id="run-again">
             <summary className="small" style={{ cursor: "pointer" }}>
               Run the analysis again
             </summary>
@@ -848,8 +932,7 @@ export async function FinancialIntelligenceTab({ c, s, link }: { c: Case; s: FiS
         )}
       </div>
 
-      {s.risk && !running && <RiskReport risk={s.risk} />}
-      {r && <PrimarySummary r={r} />}
+      {r && !showReport && <PrimarySummary r={r} />}
       <ReviewHistory rows={s.reviews ?? []} />
       <ReportsAndVersions s={s} link={link} />
       {s.isAnalyst && (a.status !== "COMPLETED" || s.freshness?.current === false || !ready.ready) && <ManualAssessment c={c} s={s} />}

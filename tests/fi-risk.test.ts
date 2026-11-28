@@ -84,4 +84,14 @@ describe("Credit Risk Report", () => {
     expect(r.grade).toBe("HIGH");
     expect(r.keyRisks.length).toBeGreaterThan(2);
   });
+
+  it("summarises each category by its worst indicator and writes a plain-English headline", () => {
+    const r = run([extractRiskSignals("s1.pdf", analytics({ betting: 2 }))]);
+    const conduct = r.categories.find((c) => c.category === "CONDUCT")!;
+    expect(conduct).toMatchObject({ level: "WATCH", note: "Gambling and betting: 2 transactions" });
+    expect(r.categories.find((c) => c.category === "AFFORDABILITY")!.level).toBe("LOW");
+    expect(r.headline).toBe("1 watch signal and no high-risk signals. Affordable at 12.50% DSR, but gambling and betting needs attention (2 transactions).");
+    const over = run([], { recommendation: rec("31.0000", false) });
+    expect(over.headline).toMatch(/DSR of 31\.00% is above the 30% limit\.$/);
+  });
 });

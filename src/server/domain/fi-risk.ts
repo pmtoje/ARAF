@@ -63,6 +63,8 @@ export interface RiskProfile {
   indicators: RiskIndicator[];
   keyRisks: string[];
   mitigants: string[];
+  /** One entry per category: worst level and the deciding indicator, for the summary cards. */
+  categories: { category: RiskCategory; label: string; level: RiskLevel; note: string }[];
   thresholdsStatus: string;
 }
 
@@ -317,10 +319,32 @@ export function assessRisk(p: {
     .filter((i) => i.level === "LOW" && ["DSR", "VOLATILITY", "SALARY", "OWNERSHIP", "RETURNED_CHEQUES", "GAMBLING", "NET_CASH", "SEEDFI"].includes(i.key))
     .slice(0, 5)
     .map((i) => `${i.label}: ${i.value}.`);
-  const headline =
-    grade === "LOW"
-      ? "No material risk signals in the statements analysed."
-      : `${high.length} high and ${watch.length} watch signal${high.length + watch.length === 1 ? "" : "s"}${high.length ? `, led by ${high[0].label.toLowerCase()}` : ""}.`;
+  const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
+  const signals =
+    !high.length && !watch.length
+      ? "No high or watch risk signals."
+      : high.length
+        ? `${plural(high.length, "high-risk signal")} and ${plural(watch.length, "watch signal")}.`
+        : `${plural(watch.length, "watch signal")} and no high-risk signals.`;
+  const top = high[0] ?? watch[0];
+  const dsrPct = r?.dsr.percent ? `${Number(r.dsr.percent).toFixed(2)}%` : null;
+  const afford =
+    r?.dsr.pass === true && dsrPct
+      ? `Affordable at ${dsrPct} DSR`
+      : r?.dsr.pass === false && dsrPct
+        ? `DSR of ${dsrPct} is above the ${r.dsr.thresholdPercent}% limit`
+        : "Income could not be established from the statements";
+  const tail = top && !(top.key === "DSR" && r?.dsr.pass === false) ? `, but ${top.label.toLowerCase()} needs attention (${top.value})` : "";
+  const headline = `${signals} ${afford}${tail}.`;
+  const RANK: Record<RiskLevel, number> = { HIGH: 3, WATCH: 2, LOW: 1, NOT_REPORTED: 0 };
+  const categories = (Object.keys(CATEGORY_LABELS) as RiskCategory[])
+    .map((category) => {
+      const items = out.filter((i) => i.category === category);
+      if (!items.length) return null;
+      const worst = [...items].sort((a, b) => RANK[b.level] - RANK[a.level])[0];
+      return { category, label: CATEGORY_LABELS[category], level: worst.level, note: `${worst.label}: ${worst.value}` };
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null);
   return {
     version: RISK_VERSION,
     grade,
@@ -331,6 +355,7 @@ export function assessRisk(p: {
     indicators: out,
     keyRisks,
     mitigants,
+    categories,
     thresholdsStatus: T.status,
   };
 }
