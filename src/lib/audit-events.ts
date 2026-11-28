@@ -96,6 +96,7 @@ const LABELS: Record<string, [string, AuditCategory]> = {
   STATEMENT_ANALYSIS_FAILED: ["Statement analysis failed", "Assessment"],
   STATEMENT_ANALYSIS_RETRIED: ["Statement analysis retried", "Assessment"],
   STATEMENT_PROCESSED: ["Bank statement processed", "Assessment"],
+  RETURN_PROMPT_SEEN: ["Return notice seen by the initiator", "Application"],
   STATEMENT_PROCESSING_FAILED: ["Bank statement could not be processed", "Assessment"],
   FINANCIAL_ASSESSMENT_COMPLETED: ["Consolidated financial assessment completed", "Assessment"],
   CREDIT_RECOMMENDATION_GENERATED: ["DSR assessed and recommendation generated", "Assessment"],

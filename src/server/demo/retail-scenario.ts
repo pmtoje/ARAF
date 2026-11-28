@@ -217,7 +217,7 @@ export async function recordFinal(id: string, o: { incomeBasisKobo?: number; ann
 /** Credit appraisal and approvals through to offer preparation. */
 export async function driveCredit(id: string, now = new Date()) {
   await recordFinal(id, {}, now);
-  await act(id, "APPROVE", {}, now);
+  await act(id, "APPROVE", { reason: "Credit review: eligibility, documents and DSR verified (synthetic)." }, now);
   const t = await openTaskOf(id);
   const app = (await db.query("SELECT route FROM applications WHERE id = $1", [id])).rows[0];
   await act(id, app.route === 1 ? "APPROVE" : "PROCEED", {}, now);

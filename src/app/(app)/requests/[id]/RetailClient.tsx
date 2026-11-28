@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { ActionForm, SubmitButton } from "@/components/forms";
+import { CommentField } from "@/components/motion";
 import { AmountInput } from "@/components/inputs";
 import { taskActionAction } from "../actions";
 import { VerifyButton, type VerifyProps } from "@/components/VerifyDialog";
@@ -28,17 +29,11 @@ const Hiddens = ({ h }: { h: Hidden }) => (
 );
 
 /** Business review decision with mandatory comments; Team Lead also records visit comments and the RM photo confirmation. */
-export function BusinessDecisionForm({ hidden, action, label, visitRequired, rmPhotoRequired, doneHref, hint, verify }: { hidden: Hidden; action: string; label: string; visitRequired: boolean; rmPhotoRequired: boolean; doneHref: string; hint: string; verify?: VerifyProps }) {
+export function BusinessDecisionForm({ hidden, action, label, visitRequired, rmPhotoRequired, doneHref, hint, verify, commentLabel }: { hidden: Hidden; action: string; label: string; visitRequired: boolean; rmPhotoRequired: boolean; doneHref: string; hint: string; verify?: VerifyProps; commentLabel?: string }) {
   return (
     <ActionForm action={taskActionAction} doneHref={doneHref}>
       <Hiddens h={{ ...hidden, action }} />
-      <div className="field">
-        <label htmlFor="bd-reason">
-          Recommendation and supporting comments<span className="req" aria-hidden="true"> *</span>
-        </label>
-        <textarea id="bd-reason" name="reason" rows={4} required minLength={10} />
-        <span className="hint">{hint}</span>
-      </div>
+      <CommentField id="bd-reason" name="reason" label={commentLabel ?? "Recommendation and supporting comments"} hint={hint} minLength={10} />
       {visitRequired && (
         <div className="field">
           <label htmlFor="bd-visit">

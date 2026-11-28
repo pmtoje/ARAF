@@ -588,6 +588,9 @@ export async function performTaskAction(ctx: Ctx, input: TaskActionInput): Promi
         if (REASON_REQUIRED.includes(input.action) && (!reason || reason.length < 3)) {
           throw invalid("A reason is required for this action.", { reason: "Enter a reason." });
         }
+        if (task.assignee_role === "CX_CREDIT_REVIEWER" && input.action === "APPROVE" && (!reason || reason.length < 10)) {
+          throw invalid("Add your CX review comment (at least 10 characters). It is shown to the approvers who follow.", { reason: "CX review comment required." });
+        }
         if ((app.workflow === "RETAIL" || task.stage === "CX_CREDIT_REVIEW") && COMMENT_REQUIRED_STAGES.includes(task.stage) && (!reason || reason.length < 10)) {
           throw invalid("Record your recommendation or decision with supporting comments (at least 10 characters).", { reason: "Comments are required." });
         }

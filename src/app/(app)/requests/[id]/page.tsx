@@ -757,7 +757,7 @@ function History({ c }: { c: Case }) {
 
 /** Readable history of the request: what happened, who did it, previous and new state, comments and references. */
 async function CaseAudit({ appId, showAll, allHref, coreHref, exportHref }: { appId: string; showAll: boolean; allHref: string; coreHref: string; exportHref: string | null }) {
-  const NOISE = ["CASE_VIEW", "DOCUMENT_VIEW", "DOCUMENT_DOWNLOAD", "DOCUMENT_SCAN_CLEAN", "DRAFT_SAVED", "APPROVAL_VERIFIED"];
+  const NOISE = ["CASE_VIEW", "DOCUMENT_VIEW", "DOCUMENT_DOWNLOAD", "DOCUMENT_SCAN_CLEAN", "DRAFT_SAVED", "APPROVAL_VERIFIED", "RETURN_PROMPT_SEEN"];
   const rows = (await db.query(
     `SELECT e.occurred_at, e.action, e.outcome, e.actor_role, e.stage, e.reason, e.details, s.full_name, e.document_version
        FROM audit_events e LEFT JOIN staff s ON s.id = e.actor_id WHERE e.application_id = $1 ${showAll ? "" : "AND NOT (e.action = ANY($2))"} ORDER BY e.id DESC LIMIT 300`,

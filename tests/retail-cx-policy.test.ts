@@ -51,7 +51,7 @@ describe("RETAIL_CX_V1 approval chain", () => {
     expect(cx).toMatchObject({ stage: "FIRST_CREDIT_REVIEW", email: "cx.one@altbank.ng" });
     expect(stageLabel(cx.stage, "RETAIL_CX_V1")).toBe("CX credit review");
     await recordFinal(id);
-    await act(id, "APPROVE", {});
+    await act(id, "APPROVE", { reason: "CX review: eligibility, documents and DSR verified." });
     expect((await openTaskOf(id)).stage).toBe("UNIT_HEAD_REVIEW");
     await act(id, "APPROVE", {});
     expect((await openTaskOf(id)).stage).toBe("DIVISIONAL_HEAD_REVIEW");
@@ -81,7 +81,7 @@ describe("RETAIL_CX_V1 approval chain", () => {
     const id = await vfCase("UH");
     expect((await openTaskOf(id)).stage).toBe("FIRST_CREDIT_REVIEW");
     await recordFinal(id);
-    await act(id, "APPROVE", {});
+    await act(id, "APPROVE", { reason: "CX review: eligibility, documents and DSR verified." });
     expect(await openTaskOf(id)).toMatchObject({ stage: "DIVISIONAL_HEAD_REVIEW", email: "div.head@altbank.ng" });
     expect((await rules(id)).map((r) => r.rule)).toEqual(["UH_ORIGINATOR_CERTIFICATION", "UH_ORIGINATOR_UNIT_HEAD_STAGE"]);
     const seen = (await stages(id)).map((s) => s.stage);
@@ -109,7 +109,7 @@ describe("RETAIL_CX_V1 approval chain", () => {
     const id2 = await vfCase("RM");
     await act(id2, "RECOMMEND", { reason: "Analysis verified; certified for credit.", visitComments: "Management visit completed; business operating as described.", rmPhotoConfirmed: true });
     await recordFinal(id2);
-    await act(id2, "APPROVE", {});
+    await act(id2, "APPROVE", { reason: "CX review: eligibility, documents and DSR verified." });
     await act(id2, "REJECT", { reason: "Concentration risk in this sector." });
     expect((await app(id2)).status).toBe("REJECTED");
   });

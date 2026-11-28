@@ -75,7 +75,7 @@ describe("approval verification", () => {
     await performTaskAction(t.ctx, await withVerification(t.input));
     await recordFinal(id);
     const cx = await openTaskOf(id);
-    await performTaskAction(await ctxFor(cx.email!), await withVerification({ taskId: cx.id, action: "APPROVE", idempotencyKey: randomUUID() }));
+    await performTaskAction(await ctxFor(cx.email!), await withVerification({ taskId: cx.id, action: "APPROVE", reason: "CX review: eligibility, documents and DSR verified.", idempotencyKey: randomUUID() }));
     expect((await rows(id)).map((r) => r.checklist_id)).toEqual(["TL_CERTIFICATION", "CX_REVIEW"]);
   });
 

@@ -28,6 +28,9 @@ import { crmNavCounts, crmPrincipal, isOversight } from "@/server/crm/core";
 import Link from "next/link";
 import { PerformanceSummary } from "@/components/Performance";
 import { DailySummaryDialog } from "./performance/DailySummaryDialog";
+import { ReturnPromptDialog } from "./ReturnPromptDialog";
+import { formatLagos } from "@/server/time";
+import { pendingReturnPrompts } from "@/server/domain/return-prompts";
 import { BottomNav, type BottomItem } from "@/components/BottomNav";
 import { HideAmountsButton, NavCollapseButton, ShellPrefsInit } from "@/components/ShellPrefs";
 import "./araf-theme.css";
@@ -68,7 +71,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const tourRole = ws ?? roles[0] ?? null;
   const welcomeDue = await onboardingDue(db, session.staffId, tourRole);
   const tours = [...new Set([tourRole, ...roles].filter(Boolean) as string[])].map((r) => ({ role: r, label: ROLE_LABELS[r as Role] ?? r, steps: tourFor(r) }));
-  const summary = !welcomeDue && (await summaryDue(db, session.staffId, new Date())) ? await dailySummary(db, session.staffId, new Date()) : null;
+  // Returned requests come first after the welcome guide; the daily summary waits for the next page load.
+  const returns = welcomeDue ? [] : await pendingReturnPrompts(db, session.staffId);
+  const summary = !welcomeDue && !returns.length && (await summaryDue(db, session.staffId, new Date())) ? await dailySummary(db, session.staffId, new Date()) : null;
   const perfTargets = await targetAccess(db, session.staffId);
   const showPerformance = roles.includes("RM") || roles.includes("TEAM_LEAD") || perfTargets.propose || perfTargets.approve;
   const showTracker = isAdmin || (retailScope?.kind === "ALL" && (await isEnabled(db, "REPAYMENT_TRACKER")));
@@ -511,6 +516,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <main className="main" id="main">
         {children}
         <OnboardingRoot role={tourRole} roleLabel={tourRole ? (ROLE_LABELS[tourRole as Role] ?? tourRole) : ""} showWelcome={welcomeDue} tours={tours} />
+        {returns.length > 0 && <ReturnPromptDialog items={returns.map((r) => ({ ...r, returnedAt: formatLagos(r.returnedAt) }))} />}
         {summary && (
           <DailySummaryDialog name={session.fullName}>
             <PerformanceSummary s={summary} />

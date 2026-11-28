@@ -146,7 +146,8 @@ function AssessmentSummary({ out, title, meta }: { out: AffordabilityOutput; tit
 /** The CX Credit Reviewer's recorded recommendation/decision comments, shown on the request for everyone with access. */
 export function CxReviewComments({ c }: { c: Case }) {
   const comments = c.decisions.filter(
-    (d: { stage: string; action: string; reason: string | null; invalidated_at: Date | null }) => d.stage === "CX_CREDIT_REVIEW" && !!d.reason?.trim() && !d.invalidated_at,
+    (d: { stage: string; actor_role?: string | null; action: string; reason: string | null; invalidated_at: Date | null }) =>
+      (d.stage === "CX_CREDIT_REVIEW" || d.actor_role === "CX_CREDIT_REVIEWER") && !!d.reason?.trim() && !d.invalidated_at,
   );
   if (!comments.length) return null;
   return (
@@ -543,7 +544,25 @@ export async function RetailActionPanel({ c, task, doneHref }: { c: Case; task: 
       body.push(<UploadPanel key="up" compact applicationId={app.id} title="Upload credit report or evidence" categories={["CREDIT_REPORT", "EXCEPTION_EVIDENCE", "SUPPORTING"].map((x) => ({ code: x, label: CATEGORY_LABEL[x] }))} />);
       if (stage === "FIRST_CREDIT_REVIEW") {
         if (current && !approveReady) body.push(<p key="fa-wait" className="small muted">Save a passing final assessment above before approving.</p>);
-        body.push(<TaskButton key="ap" hidden={hidden} action="APPROVE" label="Approve credit appraisal" doneHref={doneHref} disabled={!approveReady} verify={verifyFor("APPROVE", app.approval_policy === "RETAIL_CX_V1" ? "Approve CX credit review" : "Approve credit appraisal")} />);
+        if (task.assignee_role === "CX_CREDIT_REVIEWER") {
+          // The CX reviewer's approval carries a comment for the Unit Head and Divisional Head.
+          if (approveReady)
+            body.push(
+              <BusinessDecisionForm
+                key="ap"
+                hidden={hidden}
+                action="APPROVE"
+                label="Approve CX credit review"
+                hint="Your CX review comment is shown to the Unit Head and Divisional Head with your approval."
+                commentLabel="CX review comment"
+                visitRequired={false}
+                rmPhotoRequired={false}
+                doneHref={doneHref}
+                verify={verifyFor("APPROVE", "Approve CX credit review")}
+              />,
+            );
+          else body.push(<TaskButton key="ap" hidden={hidden} action="APPROVE" label="Approve CX credit review" doneHref={doneHref} disabled />);
+        } else body.push(<TaskButton key="ap" hidden={hidden} action="APPROVE" label="Approve credit appraisal" doneHref={doneHref} disabled={!approveReady} verify={verifyFor("APPROVE", app.approval_policy === "RETAIL_CX_V1" ? "Approve CX credit review" : "Approve credit appraisal")} />);
         secondary.push(["RETURN", "Return to initiator for correction", false], ["REJECT", "Decline", true]);
       } else {
         body.push(<TaskButton key="rs" hidden={hidden} action="RESUBMIT" label={`Resubmit to ${stageLabel((openCorrection?.from_stage as Stage) ?? "SECOND_CREDIT_REVIEW", app.approval_policy)}`} doneHref={doneHref} />);
