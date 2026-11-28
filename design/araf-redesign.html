@@ -1,0 +1,677 @@
+<title>ARAF Redesign Preview</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap">
+<style>
+/* Layout: fixed left rail + fluid work area; on phones the rail becomes a top bar and a thumb-reach bottom bar.
+   Brand kept from ARAF: charcoal ink, AltBank yellow for the one primary action, dark gold for text accents. */
+:root {
+  --bg: #f7f7f8; --surface: #ffffff; --surface-2: #f3f3f5; --surface-3: #e9e9ec;
+  --ink: #1c1d20; --ink-2: #3b3c42; --muted: #6b6d76; --line: #e6e6ea; --line-strong: #d3d3d9;
+  --rail: #ffffff; --rail-active: #f3f3f5;
+  --action: #ffc928; --action-hover: #f2b90c; --action-ink: #1c1d20;
+  --accent: #7a5900; --accent-soft: #fff6d9;
+  --danger: #b42318; --danger-bg: #fdeceb; --success: #1b6b44; --success-bg: #e8f4ed; --warn: #87570a; --warn-bg: #fdf3dc; --info: #3c4658; --info-bg: #eff1f5;
+  --chart-1: #1c1d20; --chart-2: #c9cad0; --chart-hi: #f2b90c;
+  --shadow-card: 0 1px 2px rgb(16 17 20 / 4%), 0 4px 14px rgb(16 17 20 / 5%);
+  --shadow-float: 0 18px 48px rgb(16 17 20 / 18%);
+  --font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --display: "Manrope", "Inter", system-ui, sans-serif;
+  --r-sm: 8px; --r: 10px; --r-lg: 14px;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f1012; --surface: #17181b; --surface-2: #1e1f23; --surface-3: #2a2b30;
+  --ink: #f4f4f5; --ink-2: #d6d6da; --muted: #a3a4ac; --line: #2a2b30; --line-strong: #3b3c43;
+  --rail: #131416; --rail-active: #1f2024;
+  --action: #ffc928; --action-hover: #ffd75a; --action-ink: #1c1d20; --accent: #ffd24d; --accent-soft: rgb(255 201 40 / 12%);
+  --danger: #ffb4ab; --danger-bg: rgb(255 120 105 / 14%); --success: #9fd8b6; --success-bg: #1c3a2a; --warn: #f5cf73; --warn-bg: #3d3114; --info: #c6ccd8; --info-bg: rgb(198 204 216 / 10%);
+  --chart-1: #f4f4f5; --chart-2: #45464d; --chart-hi: #ffc928;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 40%); --shadow-float: 0 18px 48px rgb(0 0 0 / 60%); color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0f1012; --surface: #17181b; --surface-2: #1e1f23; --surface-3: #2a2b30;
+  --ink: #f4f4f5; --ink-2: #d6d6da; --muted: #a3a4ac; --line: #2a2b30; --line-strong: #3b3c43;
+  --rail: #131416; --rail-active: #1f2024;
+  --action: #ffc928; --action-hover: #ffd75a; --action-ink: #1c1d20; --accent: #ffd24d; --accent-soft: rgb(255 201 40 / 12%);
+  --danger: #ffb4ab; --danger-bg: rgb(255 120 105 / 14%); --success: #9fd8b6; --success-bg: #1c3a2a; --warn: #f5cf73; --warn-bg: #3d3114; --info: #c6ccd8; --info-bg: rgb(198 204 216 / 10%);
+  --chart-1: #f4f4f5; --chart-2: #45464d; --chart-hi: #ffc928;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 40%); --shadow-float: 0 18px 48px rgb(0 0 0 / 60%); color-scheme: dark; }
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14.5px/1.5 var(--font); -webkit-font-smoothing: antialiased; }
+button, input, select, textarea { font: inherit; color: inherit; }
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+.tnum { font-variant-numeric: tabular-nums lining-nums; }
+.muted { color: var(--muted); }
+.small { font-size: 12.5px; }
+.eyebrow { font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin: 0; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+h1 { font-family: var(--display); font-weight: 800; letter-spacing: -0.025em; font-size: clamp(24px, 1vw + 18px, 30px); line-height: 1.15; }
+h2 { font-size: 16px; font-weight: 650; letter-spacing: -0.01em; }
+h3 { font-size: 14.5px; font-weight: 600; }
+.ico { width: 18px; height: 18px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Preview bar: not part of ARAF, only for moving between designs */
+.pbar { position: relative; z-index: 30; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px max(16px, env(safe-area-inset-right, 0px)) 8px max(16px, env(safe-area-inset-left, 0px)); background: #1c1d20; color: #f4f4f5; font-size: 13px; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 40; background: var(--bg); }
+.pbar strong { font-family: var(--display); letter-spacing: -0.01em; }
+.pbar .tag { background: rgb(255 201 40 / 18%); color: #ffd24d; border-radius: 99px; padding: 2px 8px; font-size: 11.5px; font-weight: 600; }
+.pbar nav { display: flex; gap: 2px; overflow-x: auto; max-width: 100%; scrollbar-width: none; }
+.pbar nav a { text-decoration: none; padding: 5px 10px; border-radius: 99px; color: #c9cad0; white-space: nowrap; }
+.pbar nav a[aria-current="page"] { background: #ffc928; color: #1c1d20; font-weight: 600; }
+.pbar .sp { flex: 1; }
+.pbar button { background: transparent; border: 1px solid #3b3c43; color: #f4f4f5; border-radius: 99px; padding: 4px 10px; cursor: pointer; }
+
+/* App shell */
+.app { display: grid; grid-template-columns: 248px minmax(0, 1fr); min-height: 100%; }
+.rail { background: var(--rail); border-right: 1px solid var(--line); padding: 18px 14px; display: flex; flex-direction: column; gap: 18px; position: sticky; top: env(safe-area-inset-top, 0px); height: 100vh; overflow-y: auto; }
+.brand { display: flex; align-items: center; gap: 10px; padding: 2px 6px; }
+.mark { width: 34px; height: 34px; border-radius: 9px; background: var(--ink); display: grid; place-items: center; flex: none; }
+.mark i { display: block; width: 18px; height: 18px; background: repeating-linear-gradient(115deg, #ffc928 0 2.5px, transparent 2.5px 5.5px); border-radius: 3px; }
+.brand b { font-family: var(--display); font-weight: 800; font-size: 16px; letter-spacing: -0.02em; display: block; line-height: 1.1; }
+.brand span { font-size: 11.5px; color: var(--muted); }
+.role { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: var(--r); padding: 8px 10px; background: var(--surface); cursor: pointer; text-align: left; width: 100%; }
+.role .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--action); box-shadow: 0 0 0 3px var(--accent-soft); }
+.role small { display: block; color: var(--muted); font-size: 11px; line-height: 1.2; }
+.role b { font-weight: 600; font-size: 13px; }
+.navg p { margin: 0 0 4px 8px; }
+.navg a { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--r-sm); text-decoration: none; color: var(--ink-2); font-weight: 500; position: relative; min-height: 38px; }
+.navg a:hover { background: var(--surface-2); }
+.navg a[aria-current="page"] { background: var(--rail-active); color: var(--ink); font-weight: 600; }
+.navg a[aria-current="page"]::before { content: ""; position: absolute; left: -14px; top: 9px; bottom: 9px; width: 3px; border-radius: 0 3px 3px 0; background: var(--action); }
+.count { margin-left: auto; font-size: 11.5px; font-weight: 700; min-width: 22px; text-align: center; border-radius: 99px; padding: 1px 7px; background: var(--surface-3); color: var(--ink); }
+.count.hot { background: var(--ink); color: var(--surface); }
+.rail .foot { margin-top: auto; font-size: 12px; color: var(--muted); padding: 0 8px; }
+
+.main { min-width: 0; display: flex; flex-direction: column; }
+.top { display: flex; align-items: center; gap: 12px; padding: 12px 32px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 85%, transparent); backdrop-filter: blur(8px); position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; }
+.search { flex: 1; max-width: 460px; display: flex; align-items: center; gap: 8px; height: 38px; border: 1px solid var(--line); border-radius: var(--r); padding: 0 12px; background: var(--surface); color: var(--muted); }
+.search input { border: 0; outline: 0; background: transparent; flex: 1; min-width: 0; color: var(--ink); }
+kbd { font: 600 11px var(--font); border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 5px; padding: 0 5px; color: var(--muted); }
+.top .sp { flex: 1; }
+.iconbtn { position: relative; width: 38px; height: 38px; border-radius: 50%; border: 1px solid transparent; background: transparent; display: grid; place-items: center; cursor: pointer; color: var(--ink-2); }
+.iconbtn:hover { background: var(--surface-2); }
+.iconbtn .badge { position: absolute; top: 3px; right: 2px; background: var(--danger); color: #fff; font-size: 10px; font-weight: 700; border-radius: 99px; padding: 0 5px; border: 2px solid var(--bg); }
+.me { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px; }
+.av { width: 32px; height: 32px; border-radius: 50%; background: var(--ink); color: var(--surface); display: grid; place-items: center; font-size: 12px; font-weight: 700; }
+.page { padding: 28px 32px 48px; display: flex; flex-direction: column; gap: 24px; max-width: 1280px; width: 100%; }
+.phead { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.phead p { margin: 4px 0 0; color: var(--muted); }
+
+/* Building blocks */
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--shadow-card); }
+.card > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px 0; }
+.card > .body { padding: 16px 20px 20px; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; padding: 0 16px; border-radius: var(--r); border: 1px solid var(--line-strong); background: var(--surface); font-weight: 600; text-decoration: none; cursor: pointer; transition: background .15s var(--ease), transform .1s var(--ease); white-space: nowrap; }
+.btn:hover { background: var(--surface-2); }
+.btn:active { transform: scale(.98); }
+.btn-primary { background: var(--action); border-color: var(--action); color: var(--action-ink); }
+.btn-primary:hover { background: var(--action-hover); }
+.btn-dark { background: var(--ink); border-color: var(--ink); color: var(--surface); }
+.btn-dark:hover { background: var(--ink-2); }
+.btn-ghost { border-color: transparent; background: transparent; }
+.btn-lg { min-height: 48px; padding: 0 22px; font-size: 15px; }
+.btn-sm { min-height: 32px; padding: 0 12px; font-size: 13px; }
+.btn[disabled] { opacity: .45; cursor: not-allowed; }
+.pill { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px; border-radius: 99px; font-size: 12px; font-weight: 600; white-space: nowrap; background: var(--info-bg); color: var(--info); }
+.pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.pill.plain::before { display: none; }
+.pill.warn { background: var(--warn-bg); color: var(--warn); }
+.pill.bad { background: var(--danger-bg); color: var(--danger); }
+.pill.good { background: var(--success-bg); color: var(--success); }
+.pill.gold { background: var(--accent-soft); color: var(--accent); }
+.seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 99px; background: var(--surface-2); border: 1px solid var(--line); max-width: 100%; overflow-x: auto; }
+.seg button { border: 0; background: transparent; border-radius: 99px; padding: 6px 12px; font-weight: 600; font-size: 13px; color: var(--muted); cursor: pointer; white-space: nowrap; min-height: 32px; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgb(0 0 0 / 10%); }
+.seg button b { margin-left: 4px; font-variant-numeric: tabular-nums; }
+.example { font-size: 11.5px; color: var(--muted); border: 1px dashed var(--line-strong); border-radius: 99px; padding: 2px 9px; }
+
+/* Overview */
+.focus { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 0; overflow: hidden; }
+.focus .lead { padding: 24px; background: var(--ink); color: #f4f4f5; display: flex; flex-direction: column; gap: 14px; }
+:root[data-theme="dark"] .focus .lead { background: #232428; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .focus .lead { background: #232428; } }
+.focus .lead .eyebrow { color: #ffd24d; }
+.focus .lead h2 { font-family: var(--display); font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
+.focus .lead p { margin: 0; color: #c9cad0; }
+.focus .lead .btn-primary { align-self: flex-start; }
+.next { display: flex; flex-direction: column; }
+.next a { display: grid; grid-template-columns: 4px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 14px 20px; text-decoration: none; border-bottom: 1px solid var(--line); min-height: 64px; }
+.next a:last-child { border-bottom: 0; }
+.next a:hover { background: var(--surface-2); }
+.next .stripe { align-self: stretch; border-radius: 4px; background: var(--danger); }
+.next .stripe.w { background: var(--action); }
+.next .stripe.ok { background: var(--line-strong); }
+.next .who { min-width: 0; }
+.next .who b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.next .who span { font-size: 12.5px; color: var(--muted); }
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.kpi { padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; }
+.kpi .v { font-family: var(--display); font-weight: 800; font-size: clamp(20px, 1vw + 14px, 26px); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.kpi .d { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12.5px; color: var(--muted); }
+.kpi svg { width: 84px; height: 26px; }
+.grid2 { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 16px; }
+.funnel { display: flex; flex-direction: column; gap: 12px; }
+.frow { display: grid; grid-template-columns: 140px minmax(0, 1fr) 64px; gap: 12px; align-items: center; font-size: 13.5px; }
+.ftrack { height: 26px; background: var(--surface-2); border-radius: 6px; overflow: hidden; }
+.ffill { height: 100%; background: var(--chart-1); border-radius: 6px; display: flex; align-items: center; justify-content: flex-end; padding-right: 8px; color: var(--surface); font-weight: 700; font-size: 12px; font-variant-numeric: tabular-nums; transform-origin: left; animation: grow .7s var(--ease) both; }
+.frow:last-child .ffill { background: var(--chart-hi); color: #1c1d20; }
+@keyframes grow { from { transform: scaleX(0.02); } }
+.frow .pct { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.stages { display: flex; flex-direction: column; }
+.stages div { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+.stages div:last-child { border-bottom: 0; }
+.stages b { font-variant-numeric: tabular-nums; }
+.bars { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; align-items: end; height: 150px; padding-top: 8px; }
+.bars div { display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end; font-size: 11.5px; color: var(--muted); }
+.bars i { display: block; width: 100%; max-width: 34px; border-radius: 6px 6px 2px 2px; background: var(--chart-2); }
+.bars div.over i { background: var(--danger); opacity: .85; }
+.bars span { white-space: nowrap; }
+.legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+
+/* Queue */
+.qtools { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: space-between; }
+.qlist { display: flex; flex-direction: column; }
+.qhead, .qrow { display: grid; grid-template-columns: 6px minmax(180px, 1.6fr) minmax(110px, .8fr) minmax(150px, 1fr) minmax(120px, .8fr) minmax(170px, 1.3fr) 104px; gap: 16px; align-items: center; padding: 0 20px 0 0; }
+.qhead { font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; padding-block: 12px; border-bottom: 1px solid var(--line); }
+.qrow { min-height: 76px; border-bottom: 1px solid var(--line); text-decoration: none; transition: background .15s; }
+.qrow:last-child { border-bottom: 0; }
+.qrow:hover { background: var(--surface-2); }
+.qrow .sla { align-self: stretch; background: var(--danger); border-radius: 0 4px 4px 0; }
+.qrow .sla.w { background: var(--action); }
+.qrow .sla.ok { background: transparent; }
+.qrow .who { min-width: 0; padding-left: 14px; }
+.qrow .who b { display: block; font-variant-numeric: tabular-nums; letter-spacing: .01em; }
+.qrow .who span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ink-2); }
+.qrow .amt { font-weight: 600; font-variant-numeric: tabular-nums; }
+.qrow .amt small { display: block; font-weight: 400; color: var(--muted); font-size: 12px; }
+.wait { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; }
+.meter { height: 5px; border-radius: 3px; background: var(--surface-3); overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--danger); border-radius: 3px; }
+.meter i.w { background: var(--action); }
+.qrow .todo { font-size: 13px; color: var(--ink-2); line-height: 1.4; }
+.qempty { padding: 40px 20px; text-align: center; color: var(--muted); }
+
+/* Request */
+.rhead { display: flex; flex-direction: column; gap: 16px; }
+.crumbs { font-size: 13px; color: var(--muted); }
+.crumbs a { text-decoration: none; }
+.rtitle { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
+.rtitle .l { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.rtitle .pills { display: flex; gap: 6px; flex-wrap: wrap; }
+.rtitle .cust { font-size: 15px; color: var(--ink-2); }
+.bigamt { text-align: right; }
+.bigamt .v { font-family: var(--display); font-weight: 800; font-size: clamp(24px, 1.4vw + 16px, 34px); letter-spacing: -0.025em; font-variant-numeric: tabular-nums; }
+.track { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.track div { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); min-width: 0; }
+.track i { height: 6px; border-radius: 3px; background: var(--surface-3); }
+.track .done i { background: var(--ink); }
+.track .now i { background: var(--action); box-shadow: 0 0 0 3px var(--accent-soft); }
+.track .now { color: var(--ink); font-weight: 600; }
+.track span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rgrid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 24px; align-items: start; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+.tabs button { border: 0; background: transparent; padding: 10px 12px; font-weight: 600; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; min-height: 44px; }
+.tabs button[aria-selected="true"] { color: var(--ink); border-color: var(--action); }
+.tabs .c { font-size: 11px; background: var(--surface-3); border-radius: 99px; padding: 1px 6px; margin-left: 4px; color: var(--ink); }
+.facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.facts > div { padding: 16px 20px; border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.facts > div:last-child { border-right: 0; }
+.facts .v { font-family: var(--display); font-size: 20px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.gauge { height: 6px; border-radius: 3px; background: var(--surface-3); position: relative; margin-top: 4px; }
+.gauge i { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: var(--success); }
+.gauge b { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--ink); left: 100%; }
+.grade { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 8px; background: var(--action); color: #1c1d20; font-family: var(--display); font-weight: 800; font-size: 18px; }
+.note { border-left: 3px solid var(--action); background: var(--surface-2); border-radius: 0 var(--r) var(--r) 0; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; }
+.note .by { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+.note p { margin: 0; }
+dl.kv { display: grid; grid-template-columns: minmax(130px, 200px) minmax(0, 1fr); margin: 0; }
+dl.kv dt, dl.kv dd { padding: 11px 0; border-bottom: 1px solid var(--line); margin: 0; font-size: 13.5px; }
+dl.kv dt { color: var(--muted); }
+dl.kv dd { overflow-wrap: anywhere; }
+dl.kv dt:last-of-type, dl.kv dd:last-of-type { border-bottom: 0; }
+.stack { display: flex; flex-direction: column; gap: 16px; }
+.actionp { position: sticky; top: 76px; display: flex; flex-direction: column; overflow: hidden; }
+.actionp .hd { padding: 18px 20px 14px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
+.actionp .hd h2 { font-family: var(--display); font-size: 18px; font-weight: 800; }
+.chk { padding: 14px 20px; display: flex; flex-direction: column; gap: 10px; border-bottom: 1px solid var(--line); }
+.prog { display: flex; align-items: center; justify-content: space-between; font-size: 12.5px; color: var(--muted); }
+.chk ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.chk li { display: flex; gap: 10px; align-items: center; padding: 7px 8px; border-radius: 8px; font-size: 13.5px; }
+.chk li.todo { background: var(--accent-soft); }
+.chk li .tick { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; flex: none; border: 1.5px solid var(--line-strong); font-size: 11px; }
+.chk li.ok .tick { background: var(--success); border-color: var(--success); color: var(--surface); }
+.chk li a { margin-left: auto; font-size: 12.5px; font-weight: 600; color: var(--accent); text-decoration: none; }
+.decide { padding: 16px 20px 20px; display: flex; flex-direction: column; gap: 12px; }
+.decide label { font-weight: 600; font-size: 13.5px; }
+.decide textarea { width: 100%; min-height: 92px; resize: vertical; border: 1px solid var(--line-strong); border-radius: var(--r); padding: 10px 12px; background: var(--surface); }
+.decide textarea:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
+.cmeter { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
+.cmeter.ok { color: var(--success); }
+.swap { display: inline-grid; place-items: center; width: 16px; height: 16px; }
+.swap > * { grid-area: 1/1; transition: opacity .2s var(--ease), filter .2s var(--ease), transform .2s var(--ease); }
+.swap[data-s="a"] .b, .swap[data-s="b"] .a { opacity: 0; filter: blur(4px); transform: scale(.6); }
+.pulse { animation: pulse .36s var(--ease); }
+@keyframes pulse { 35% { transform: scale(1.06); } }
+.dual { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.more { display: flex; gap: 6px; justify-content: center; }
+
+/* New request */
+.steps { display: flex; gap: 0; counter-reset: s; overflow-x: auto; scrollbar-width: none; }
+.steps li { list-style: none; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); white-space: nowrap; padding-right: 10px; }
+.steps li::before { counter-increment: s; content: counter(s); width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; border: 1.5px solid var(--line-strong); font-weight: 700; font-size: 12px; }
+.steps li::after { content: ""; width: 28px; height: 1.5px; background: var(--line-strong); }
+.steps li:last-child::after { display: none; }
+.steps li.now { color: var(--ink); font-weight: 600; }
+.steps li.now::before { background: var(--ink); border-color: var(--ink); color: var(--surface); }
+.ngrid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; align-items: start; }
+.choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.choice { display: flex; gap: 14px; align-items: flex-start; text-align: left; padding: 18px; border-radius: var(--r-lg); border: 1.5px solid var(--line); background: var(--surface); cursor: pointer; transition: border-color .15s, box-shadow .15s; min-height: 96px; }
+.choice:hover { border-color: var(--line-strong); }
+.choice[aria-pressed="true"] { border-color: var(--ink); box-shadow: 0 0 0 3px var(--accent-soft); }
+.choice .ci { width: 40px; height: 40px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; flex: none; }
+.choice b { display: block; font-size: 15px; }
+.choice span { color: var(--muted); font-size: 13px; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field label { font-weight: 600; font-size: 13.5px; }
+.field input { height: 44px; border: 1px solid var(--line-strong); border-radius: var(--r); padding: 0 12px; background: var(--surface); letter-spacing: .04em; font-variant-numeric: tabular-nums; }
+.field .hint { font-size: 12.5px; color: var(--muted); }
+.need ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 13.5px; }
+.need li { display: flex; gap: 10px; }
+.need li::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--action); margin-top: 8px; flex: none; }
+.formfoot { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+/* Return notice */
+dialog.notice { border: 0; padding: 0; border-radius: 16px; width: min(520px, calc(100% - 32px)); background: var(--surface); color: var(--ink); box-shadow: var(--shadow-float); }
+dialog.notice[open] { animation: reveal .38s var(--ease); }
+@keyframes reveal { from { clip-path: inset(0 0 100% 0 round 16px); opacity: .4; } to { clip-path: inset(0 0 0 0 round 16px); opacity: 1; } }
+dialog.notice::backdrop { background: rgb(10 11 14 / 45%); backdrop-filter: blur(6px) saturate(.8); }
+.notice .nb { padding: 22px 22px 6px; display: flex; flex-direction: column; gap: 12px; }
+.notice .nb > * { animation: stagein .32s var(--ease) both; }
+.notice .nb > :nth-child(2) { animation-delay: .07s; } .notice .nb > :nth-child(3) { animation-delay: .14s; } .notice .nb > :nth-child(4) { animation-delay: .21s; }
+@keyframes stagein { from { opacity: 0; transform: translateY(6px); filter: blur(2px); } }
+.notice h2 { font-family: var(--display); font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
+.ritem { border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
+.ritem[data-open] { background: var(--surface); border-color: var(--line-strong); }
+.ritem > button { all: unset; box-sizing: border-box; width: 100%; display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 12px 14px; cursor: pointer; min-height: 48px; }
+.ritem > button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 12px; }
+.ritem .pm { width: 28px; height: 28px; border-radius: 50%; background: var(--surface-3); font-weight: 700; }
+.ritem .det { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .28s var(--ease); }
+.ritem .det > div { overflow: hidden; padding: 0 14px; }
+.ritem[data-open] .det { grid-template-rows: 1fr; }
+.ritem[data-open] .det > div { padding-bottom: 14px; }
+.notice .na { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 22px 18px; }
+
+/* Phone */
+.bottom { display: none; }
+@media (max-width: 1080px) {
+  .rgrid, .ngrid { grid-template-columns: minmax(0, 1fr); }
+  .actionp { position: static; }
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid2 { grid-template-columns: minmax(0, 1fr); }
+  .qhead { display: none; }
+  .qrow { grid-template-columns: 5px minmax(0, 1fr) auto; grid-template-areas: "s who amt" "s stage wait" "s todo go"; gap: 8px 12px; padding: 14px 16px 14px 0; }
+  .qrow .sla { grid-area: s; } .qrow .who { grid-area: who; } .qrow .amt { grid-area: amt; text-align: right; }
+  .qrow .stg { grid-area: stage; padding-left: 14px; } .qrow .wait { grid-area: wait; min-width: 110px; }
+  .qrow .todo { grid-area: todo; padding-left: 14px; } .qrow .go { grid-area: go; }
+}
+@media (max-width: 760px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .rail { display: none; }
+  .top { padding: 10px max(16px, env(safe-area-inset-right, 0px)) 10px max(16px, env(safe-area-inset-left, 0px)); }
+  .top .me span, .search kbd { display: none; }
+  .page { padding: 20px max(16px, env(safe-area-inset-right, 0px)) 96px max(16px, env(safe-area-inset-left, 0px)); gap: 18px; }
+  .focus { grid-template-columns: minmax(0, 1fr); }
+  .kpi svg { display: none; }
+  .frow { grid-template-columns: 100px minmax(0, 1fr) 44px; }
+  .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .facts > div:nth-child(2) { border-right: 0; }
+  .facts > div:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+  .bigamt { text-align: left; }
+  .track span { display: none; }
+  .track .now span { display: block; position: absolute; }
+  dl.kv { grid-template-columns: minmax(0, 1fr); }
+  dl.kv dt { border-bottom: 0; padding-bottom: 0; }
+  .choices { grid-template-columns: minmax(0, 1fr); }
+  .bottom { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); position: fixed; left: 0; right: 0; bottom: 0; z-index: 25; background: var(--surface); border-top: 1px solid var(--line); padding: 6px max(8px, env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px)); }
+  .bottom a { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; text-decoration: none; color: var(--muted); padding: 6px 0; min-height: 48px; position: relative; }
+  .bottom a[aria-current="page"] { color: var(--ink); font-weight: 600; }
+  .bottom a.new span.ico-wrap { width: 44px; height: 44px; border-radius: 14px; background: var(--action); color: #1c1d20; display: grid; place-items: center; margin-top: -18px; box-shadow: 0 6px 16px rgb(242 185 12 / 35%); }
+  .bottom .b { position: absolute; top: 2px; left: 55%; background: var(--danger); color: #fff; font-size: 10px; border-radius: 99px; padding: 0 5px; font-weight: 700; }
+  .actionp .stickybar { position: sticky; bottom: 70px; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
+  <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M3 13h5l1.5 3h5L16 13h5"/><path d="M5.5 5h13L21 13v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-6z"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M21 20H3"/></symbol>
+  <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5V14M12 17.5h.01"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+  <symbol id="i-store" viewBox="0 0 24 24"><path d="M4 9 5.5 4h13L20 9M4 9h16v2a3 3 0 0 1-5.3 2 3 3 0 0 1-5.4 0A3 3 0 0 1 4 11zM5 13v7h14v-7"/></symbol>
+  <symbol id="i-brief" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M3 13h18"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+</svg>
+
+<div class="pbar" role="region" aria-label="Design preview controls">
+  <strong>ARAF redesign</strong><span class="tag">Design preview · example data</span>
+  <nav aria-label="Screens">
+    <a href="#overview">Overview</a><a href="#queue">Action Queue</a><a href="#request">Request</a><a href="#new">New request</a><a href="#notice">Return notice</a>
+  </nav>
+  <span class="sp"></span>
+  <button type="button" id="theme" aria-label="Switch light or dark">Light / dark</button>
+</div>
+
+<div class="app">
+  <aside class="rail" aria-label="Main menu">
+    <div class="brand"><span class="mark"><i></i></span><div><b>Retail Asset Factory</b><span>ARAF</span></div></div>
+    <button class="role" type="button"><span class="dot"></span><span><small>Working as</small><b id="roleName">Relationship Manager</b></span></button>
+    <nav class="navg" aria-label="Work"><p class="eyebrow">Work</p>
+      <a href="#overview" data-nav="overview"><svg class="ico"><use href="#i-home"/></svg>Overview</a>
+      <a href="#queue" data-nav="queue"><svg class="ico"><use href="#i-inbox"/></svg>Action Queue<span class="count hot">5</span></a>
+      <a href="#notice" data-nav="notice"><svg class="ico"><use href="#i-bell"/></svg>Notifications<span class="count">14</span></a>
+    </nav>
+    <nav class="navg" aria-label="Requests"><p class="eyebrow">Requests</p>
+      <a href="#new" data-nav="new"><svg class="ico"><use href="#i-plus"/></svg>New request</a>
+      <a href="#request" data-nav="request"><svg class="ico"><use href="#i-list"/></svg>My requests</a>
+      <a href="#request"><svg class="ico"><use href="#i-file"/></svg>Offer letters</a>
+    </nav>
+    <nav class="navg" aria-label="Insight"><p class="eyebrow">Insight</p>
+      <a href="#overview"><svg class="ico"><use href="#i-target"/></svg>My performance</a>
+      <a href="#overview"><svg class="ico"><use href="#i-chart"/></svg>Reports</a>
+      <a href="#overview"><svg class="ico"><use href="#i-help"/></svg>Help and support</a>
+    </nav>
+    <p class="foot">Internal use only</p>
+  </aside>
+
+  <div class="main">
+    <header class="top">
+      <label class="search"><svg class="ico"><use href="#i-search"/></svg><input id="q" placeholder="Find a request, customer or reference" aria-label="Search"><kbd>/</kbd></label>
+      <span class="sp"></span>
+      <button class="iconbtn" type="button" aria-label="Notifications, 14 unread"><svg class="ico"><use href="#i-bell"/></svg><span class="badge">14</span></button>
+      <span class="me"><span class="av">BA</span><span>Bola Adisa</span></span>
+    </header>
+
+    <!-- OVERVIEW -->
+    <main class="page" id="v-overview" data-view hidden>
+      <div class="phead">
+        <div><p class="eyebrow">Saturday 28 November</p><h1>Good afternoon, Bola</h1><p>3 requests need you today. 2 are past their service time.</p></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><span class="example">Example data</span><a class="btn" href="#overview">This month ▾</a><a class="btn btn-dark" href="#new"><svg class="ico"><use href="#i-plus"/></svg>New request</a></div>
+      </div>
+
+      <section class="card focus" aria-labelledby="focus-h">
+        <div class="lead">
+          <p class="eyebrow">Next up</p>
+          <h2 id="focus-h">ARAF-2026-001064 · Ngozi Eze</h2>
+          <p>Offer pack preparation. Generate the offer and upload the signed pack. Waiting 12 days, past the 2-day service time.</p>
+          <a class="btn btn-primary btn-lg" href="#request">Start this request <svg class="ico"><use href="#i-arrow"/></svg></a>
+        </div>
+        <div class="next" aria-label="Also waiting for you">
+          <a href="#request"><span class="stripe"></span><span class="who"><b>ARAF-2026-001121 · Amina Fabrics</b><span>Returned for rework · statement page missing</span></span><span class="pill bad">2d over</span></a>
+          <a href="#request"><span class="stripe w"></span><span class="who"><b>ARAF-2026-001116 · Amina Fabrics</b><span>Draft · documents to upload</span></span><span class="pill warn">Due today</span></a>
+          <a href="#queue"><span class="stripe ok"></span><span class="who"><b>See all 5 in your Action Queue</b><span>Sorted by how long they have waited</span></span><svg class="ico"><use href="#i-arrow"/></svg></a>
+        </div>
+      </section>
+
+      <section class="kpis" aria-label="This month">
+        <div class="card kpi"><p class="eyebrow">Requested</p><span class="v">₦119.3m</span><span class="d"><span>28 submitted</span><svg viewBox="0 0 84 26"><polyline points="0,22 14,19 28,20 42,14 56,15 70,8 84,5" fill="none" stroke="var(--chart-1)" stroke-width="2"/><circle cx="84" cy="5" r="2.5" fill="var(--chart-hi)"/></svg></span></div>
+        <div class="card kpi"><p class="eyebrow">Credit approved</p><span class="v">₦75.3m</span><span class="d"><span>14 · 50% of submitted</span><svg viewBox="0 0 84 26"><polyline points="0,20 14,21 28,16 42,17 56,11 70,12 84,7" fill="none" stroke="var(--chart-1)" stroke-width="2"/><circle cx="84" cy="7" r="2.5" fill="var(--chart-hi)"/></svg></span></div>
+        <div class="card kpi"><p class="eyebrow">Booked</p><span class="v">₦55.0m</span><span class="d"><span>9 facilities</span><svg viewBox="0 0 84 26"><polyline points="0,23 14,21 28,21 42,17 56,14 70,13 84,10" fill="none" stroke="var(--chart-1)" stroke-width="2"/><circle cx="84" cy="10" r="2.5" fill="var(--chart-hi)"/></svg></span></div>
+        <div class="card kpi"><p class="eyebrow">Disbursed</p><span class="v">₦55.0m</span><span class="d"><span>9 paid and reconciled</span><svg viewBox="0 0 84 26"><polyline points="0,24 14,22 28,20 42,18 56,15 70,12 84,10" fill="none" stroke="var(--chart-1)" stroke-width="2"/><circle cx="84" cy="10" r="2.5" fill="var(--chart-hi)"/></svg></span></div>
+      </section>
+
+      <div class="grid2">
+        <section class="card" aria-labelledby="fun-h"><header><h2 id="fun-h">From submission to disbursement</h2><span class="small muted">Count of requests</span></header>
+          <div class="body funnel">
+            <div class="frow"><span>Submitted</span><span class="ftrack"><span class="ffill" style="width:100%">28</span></span><span class="pct">100%</span></div>
+            <div class="frow"><span>Business approved</span><span class="ftrack"><span class="ffill" style="width:75%">21</span></span><span class="pct">75%</span></div>
+            <div class="frow"><span>Credit approved</span><span class="ftrack"><span class="ffill" style="width:50%">14</span></span><span class="pct">50%</span></div>
+            <div class="frow"><span>Booked</span><span class="ftrack"><span class="ffill" style="width:32%">9</span></span><span class="pct">32%</span></div>
+            <div class="frow"><span>Disbursed</span><span class="ftrack"><span class="ffill" style="width:32%">9</span></span><span class="pct">32%</span></div>
+          </div>
+        </section>
+        <section class="card" aria-labelledby="st-h"><header><h2 id="st-h">Where your requests are</h2><a class="small" href="#queue" style="font-weight:600;color:var(--accent);text-decoration:none">View all</a></header>
+          <div class="body stages">
+            <div><span>Draft</span><b>16</b></div>
+            <div><span>First credit review</span><b>6</b></div>
+            <div><span>Business endorsement</span><b>2</b></div>
+            <div><span>Offer pack preparation</span><span style="display:flex;gap:8px;align-items:center"><span class="pill bad">1 overdue</span><b>1</b></span></div>
+            <div><span>Disbursement booking</span><b>1</b></div>
+            <div><span>Completed</span><b>9</b></div>
+          </div>
+        </section>
+      </div>
+
+      <section class="card" aria-labelledby="ta-h"><header><h2 id="ta-h">Average time at each stage</h2><span class="legend"><span><i style="background:var(--chart-2)"></i>Within service time</span><span><i style="background:var(--danger)"></i>Over service time</span></span></header>
+        <div class="body bars tnum">
+          <div><span>6h</span><i style="height:30%"></i><span>Team Lead</span></div>
+          <div><span>9h</span><i style="height:42%"></i><span>Business</span></div>
+          <div class="over"><span>1.8d</span><i style="height:88%"></i><span>Credit</span></div>
+          <div><span>7h</span><i style="height:34%"></i><span>Unit Head</span></div>
+          <div class="over"><span>2.4d</span><i style="height:100%"></i><span>Offer</span></div>
+          <div><span>5h</span><i style="height:24%"></i><span>Booking</span></div>
+          <div><span>3h</span><i style="height:16%"></i><span>Payment</span></div>
+        </div>
+      </section>
+    </main>
+
+    <!-- QUEUE -->
+    <main class="page" id="v-queue" data-view hidden>
+      <div class="phead"><div><p class="eyebrow">Work</p><h1>Action Queue</h1><p>Oldest first. Red means it is past its service time.</p></div><span class="example">Example data</span></div>
+      <div class="qtools">
+        <div class="seg" role="group" aria-label="Filter">
+          <button type="button" aria-pressed="true" data-f="all">All<b>5</b></button>
+          <button type="button" aria-pressed="false" data-f="over">Overdue<b>3</b></button>
+          <button type="button" aria-pressed="false" data-f="ret">Returned<b>1</b></button>
+          <button type="button" aria-pressed="false" data-f="new">New<b>1</b></button>
+        </div>
+        <span class="small muted">Credit Officer 1 · all your roles</span>
+      </div>
+      <section class="card" aria-label="Requests waiting for you">
+        <div class="qhead" aria-hidden="true"><span></span><span style="padding-left:14px">Request</span><span>Amount</span><span>Stage</span><span>Waiting</span><span>What to do</span><span></span></div>
+        <div class="qlist" id="qlist"></div>
+      </section>
+    </main>
+
+    <!-- REQUEST -->
+    <main class="page" id="v-request" data-view hidden>
+      <div class="rhead">
+        <div class="crumbs"><a href="#queue">Action Queue</a> / ARAF-2026-001121</div>
+        <div class="rtitle">
+          <div class="l">
+            <h1 class="tnum">ARAF-2026-001121</h1>
+            <span class="cust">Amina Bello trading as Amina Fabrics</span>
+            <div class="pills"><span class="pill gold">First credit review</span><span class="pill plain">Vendor Financing</span><span class="pill plain">Route 1</span><span class="pill bad">8h over service time</span></div>
+          </div>
+          <div class="bigamt"><p class="eyebrow">Requested</p><span class="v">₦2,000,000.00</span><p class="small muted" style="margin:2px 0 0">12 months · Standard 23%</p></div>
+        </div>
+        <div class="track" aria-label="Progress: stage 3 of 7, Credit">
+          <div class="done"><i></i><span>Initiation</span></div><div class="done"><i></i><span>Business review</span></div><div class="now"><i></i><span>Credit</span></div><div><i></i><span>Offer</span></div><div><i></i><span>Booking</span></div><div><i></i><span>Payment</span></div><div><i></i><span>Fulfilment</span></div>
+        </div>
+      </div>
+
+      <div class="rgrid">
+        <div class="stack">
+          <div class="tabs" role="tablist" aria-label="Request sections">
+            <button role="tab" aria-selected="true">Overview</button><button role="tab" aria-selected="false">Documents<span class="c">11</span></button><button role="tab" aria-selected="false">Assessment</button><button role="tab" aria-selected="false">Risk report</button><button role="tab" aria-selected="false">Activity</button>
+          </div>
+          <section class="card facts" aria-label="Key figures">
+            <div><p class="eyebrow">DSR</p><span class="v">20.5%</span><span class="gauge" title="Limit 30%"><i style="width:68%"></i><b style="left:100%"></b></span><span class="small muted">Limit 30%</span></div>
+            <div><p class="eyebrow">Monthly repayment</p><span class="v">₦205,000</span><span class="small muted">From ₦1.0m turnover</span></div>
+            <div><p class="eyebrow">Risk grade</p><span style="display:flex;gap:10px;align-items:center"><span class="grade">B</span><span class="small">Moderate<br><span class="muted">Test data</span></span></span></div>
+            <div><p class="eyebrow">Documents</p><span class="v">11 / 12</span><span class="small muted">1 still needed</span></div>
+          </section>
+          <section class="card"><header><h2>CX review comments</h2><span class="small muted">Shown to every approver</span></header>
+            <div class="body"><div class="note"><span class="by"><b>Ada Nwosu</b><span class="pill good">Recommended</span><span class="muted">28 Nov, 00:36</span></span><p>Verified against the documents; recommended for the next stage.</p></div></div>
+          </section>
+          <section class="card"><header><h2>Customer</h2><button class="btn btn-sm" type="button">Reveal identifiers</button></header>
+            <div class="body"><dl class="kv">
+              <dt>Customer type</dt><dd>Business owner / registered business</dd>
+              <dt>DAO code</dt><dd class="tnum">DAO-1001</dd>
+              <dt>CAC registration</dt><dd class="tnum">BN123456</dd>
+              <dt>Phone · email</dt><dd class="tnum">0803 123 4567 · amina@example.com</dd>
+              <dt>Business address</dt><dd>5 Commercial Avenue, Yaba, Lagos</dd>
+              <dt>BVN</dt><dd class="tnum">•••••••7890 <span class="muted">format checked, not verified</span></dd>
+            </dl></div>
+          </section>
+          <section class="card"><header><h2>Facility and beneficiary</h2></header>
+            <div class="body"><dl class="kv">
+              <dt>Purpose</dt><dd>Stock purchase from vendor</dd>
+              <dt>Vendor</dt><dd><b>Synthetic Distributors Ltd</b><br><span class="muted small">Synthetic Commercial Bank · 0123456789 · verified with manual evidence</span></dd>
+              <dt>Existing obligations</dt><dd>None declared</dd>
+              <dt>Repayment account</dt><dd class="muted">Not recorded yet</dd>
+            </dl></div>
+          </section>
+        </div>
+
+        <aside class="card actionp" aria-labelledby="act-h">
+          <div class="hd"><p class="eyebrow">Your action</p><h2 id="act-h">First credit review</h2><span class="small muted">Assigned 28 Nov, 00:36 · Credit Officer 1</span></div>
+          <div class="chk">
+            <div class="prog"><span>Before you decide</span><b class="tnum">2 of 4 done</b></div>
+            <div class="meter" style="height:6px"><i style="width:50%;background:var(--success)"></i></div>
+            <ul>
+              <li class="ok"><span class="tick">✓</span>Beneficiary verified</li>
+              <li class="ok"><span class="tick">✓</span>Statement analysis reviewed</li>
+              <li class="todo"><span class="tick"></span>Final assessment<a href="#request">Complete</a></li>
+              <li class="todo"><span class="tick"></span>3 credit reports<a href="#request">Upload</a></li>
+            </ul>
+          </div>
+          <div class="decide">
+            <label for="cmt">Recommendation and comments</label>
+            <textarea id="cmt" placeholder="What you checked and why you recommend it"></textarea>
+            <span class="cmeter" id="cm" aria-live="polite"><span class="swap" data-s="a"><span class="a">○</span><span class="b">✓</span></span><span id="cmt-t">0/10 characters minimum</span></span>
+            <div class="dual stickybar"><button class="btn btn-primary btn-lg" type="button" disabled id="approve">Approve credit review</button><button class="btn btn-lg" type="button" aria-label="More decisions">Return ▾</button></div>
+            <p class="small muted" style="margin:0">Approve unlocks when the checklist is done and your comment is in. Decline and return sit under Return.</p>
+          </div>
+        </aside>
+      </div>
+    </main>
+
+    <!-- NEW -->
+    <main class="page" id="v-new" data-view hidden>
+      <div class="phead"><div><p class="eyebrow">Requests</p><h1>New financing request</h1><p>Six short steps. Your progress saves as you go.</p></div></div>
+      <ol class="steps" style="margin:0;padding:0" aria-label="Steps"><li class="now">Customer</li><li>Product</li><li>Customer details</li><li>Facility</li><li>Documents</li><li>Review and submit</li></ol>
+      <div class="ngrid">
+        <section class="card"><div class="body stack" style="padding:24px">
+          <div class="field"><label for="dao">DAO code</label><input id="dao" value="DAO-" inputmode="text" autocomplete="off"><span class="hint">Your Direct Account Officer code. It goes on the request and the offer letter.</span></div>
+          <div class="stack" style="gap:10px"><h2>Who is the customer?</h2><p class="muted" style="margin:0">This decides which products and documents apply.</p>
+            <div class="choices">
+              <button class="choice" type="button" aria-pressed="true"><span class="ci"><svg class="ico"><use href="#i-store"/></svg></span><span><b>Business owner</b><span>Traders and registered businesses. Affordability from business turnover.</span></span></button>
+              <button class="choice" type="button" aria-pressed="false"><span class="ci"><svg class="ico"><use href="#i-brief"/></svg></span><span><b>Salaried individual</b><span>Customers in paid employment. Affordability from salary.</span></span></button>
+            </div>
+          </div>
+          <div class="formfoot"><span class="small muted">Draft saved 2 minutes ago</span><a class="btn btn-primary btn-lg" href="#new">Continue <svg class="ico"><use href="#i-arrow"/></svg></a></div>
+        </div></section>
+        <aside class="card need"><header><h2>Have these ready</h2></header><div class="body"><ul>
+          <li>6 months of bank statements (PDF)</li><li>Valid ID and BVN</li><li>CAC certificate for registered businesses</li><li>Vendor invoice and account details</li><li>Photos of the business, with you in one</li>
+        </ul></div></aside>
+      </div>
+    </main>
+  </div>
+</div>
+
+<nav class="bottom" aria-label="Main menu">
+  <a href="#overview" data-nav="overview"><svg class="ico"><use href="#i-home"/></svg>Home</a>
+  <a href="#queue" data-nav="queue"><svg class="ico"><use href="#i-inbox"/></svg>Queue<span class="b">5</span></a>
+  <a href="#new" class="new" data-nav="new"><span class="ico-wrap"><svg class="ico"><use href="#i-plus"/></svg></span>New</a>
+  <a href="#request" data-nav="request"><svg class="ico"><use href="#i-list"/></svg>Requests</a>
+  <a href="#notice" data-nav="notice"><svg class="ico"><use href="#i-more"/></svg>More</a>
+</nav>
+
+<dialog class="notice" id="notice" aria-labelledby="n-h">
+  <div class="nb">
+    <p class="eyebrow">Action needed</p>
+    <h2 id="n-h">2 requests were returned to you for rework</h2>
+    <div class="stack" style="gap:8px" id="ritems">
+      <div class="ritem" data-open><button type="button" aria-expanded="true"><span><b class="tnum">ARAF-2026-001121</b><br><span class="small muted">Amina Fabrics · returned by Ada Nwosu at CX credit review · 28 Nov, 08:56</span></span><span class="pm swap" data-s="b" style="width:28px;height:28px"><span class="a">+</span><span class="b">−</span></span></button>
+        <div class="det"><div><p style="margin:0" class="small"><b>Reason:</b> Add the latest bank statement page (October) and confirm the vendor's account name.</p><p style="margin:10px 0 0"><a class="btn btn-sm" href="#request">Open ARAF-2026-001121</a></p></div></div></div>
+      <div class="ritem"><button type="button" aria-expanded="false"><span><b class="tnum">ARAF-2026-001122</b><br><span class="small muted">Amina Fabrics · returned by Ada Nwosu at CX credit review · 28 Nov, 08:56</span></span><span class="pm swap" data-s="a" style="width:28px;height:28px"><span class="a">+</span><span class="b">−</span></span></button>
+        <div class="det"><div><p style="margin:0" class="small"><b>Reason:</b> The invoice date is after the statement period; upload the corrected invoice.</p><p style="margin:10px 0 0"><a class="btn btn-sm" href="#request">Open ARAF-2026-001122</a></p></div></div></div>
+    </div>
+    <p class="small muted" style="margin:0">Make the changes and resubmit. It goes back to the reviewer who returned it.</p>
+  </div>
+  <div class="na"><button class="btn btn-ghost" type="button" id="later">Later</button><a class="btn btn-primary btn-lg" href="#queue" id="toq">Open my Action Queue</a></div>
+</dialog>
+
+<script>
+const rows = [
+  { ref: "ARAF-2026-001064", cust: "Ngozi Eze", amt: "₦2,500,000", prod: "Alt Power", stage: ["Offer pack preparation", "bad"], wait: "12d 11h", pct: 100, sla: "", todo: "Generate the offer and upload the signed pack", f: ["over"] },
+  { ref: "ARAF-2026-001121", cust: "Amina Bello trading as Amina Fabrics", amt: "₦2,000,000", prod: "Vendor Financing", stage: ["Returned for rework", "bad"], wait: "2d 3h", pct: 100, sla: "", todo: "Add the October statement page and confirm the vendor account name", f: ["over", "ret"] },
+  { ref: "ARAF-2026-001117", cust: "Amina Bello trading as Amina Fabrics", amt: "₦2,000,000", prod: "Vendor Financing", stage: ["First credit review", "gold"], wait: "10h 21m", pct: 100, sla: "", todo: "Upload 3 credit reports, complete APR and DSR, decide", f: ["over"] },
+  { ref: "ARAF-2026-001116", cust: "Tunde Bakare trading as Tunde Enterprises", amt: "₦1,500,000", prod: "Vendor Financing", stage: ["Business endorsement", "gold"], wait: "2h 40m", pct: 72, sla: "w", todo: "Endorse, decline or return the request", f: [] },
+  { ref: "ARAF-2026-001130", cust: "Chiamaka Obi", amt: "₦850,000", prod: "Alt Drive", stage: ["Draft", "plain"], wait: "18m", pct: 8, sla: "ok", todo: "Finish the customer details and upload documents", f: ["new"] },
+];
+const ql = document.getElementById("qlist");
+function drawQueue(f) {
+  const list = rows.filter(r => f === "all" || r.f.includes(f));
+  ql.innerHTML = list.length ? list.map(r => `
+    <a class="qrow" href="#request">
+      <span class="sla ${r.sla}"></span>
+      <span class="who"><b>${r.ref}</b><span title="${r.cust}">${r.cust}</span></span>
+      <span class="amt">${r.amt}<small>${r.prod}</small></span>
+      <span class="stg"><span class="pill ${r.stage[1]}">${r.stage[0]}</span></span>
+      <span class="wait"><span class="tnum">${r.wait}${r.sla === "" ? " · overdue" : ""}</span><span class="meter"><i class="${r.sla}" style="width:${r.pct}%;${r.sla === "ok" ? "background:var(--line-strong)" : ""}"></i></span></span>
+      <span class="todo">${r.todo}</span>
+      <span class="go"><span class="btn ${r.sla === "" ? "btn-primary" : ""} btn-sm">Open</span></span>
+    </a>`).join("") : `<p class="qempty">Nothing here. You are up to date.</p>`;
+}
+drawQueue("all");
+document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll(".seg button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+  drawQueue(b.dataset.f);
+}));
+document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => document.querySelectorAll(".tabs button").forEach(x => x.setAttribute("aria-selected", String(x === b)))));
+document.querySelectorAll(".choice").forEach(b => b.addEventListener("click", () => document.querySelectorAll(".choice").forEach(x => x.setAttribute("aria-pressed", String(x === b)))));
+
+const cmt = document.getElementById("cmt"), cm = document.getElementById("cm"), ct = document.getElementById("cmt-t"), ap = document.getElementById("approve");
+let wasOk = false;
+cmt.addEventListener("input", () => {
+  const n = cmt.value.trim().length, ok = n >= 10;
+  cm.classList.toggle("ok", ok); cm.querySelector(".swap").dataset.s = ok ? "b" : "a";
+  ct.textContent = ok ? "Comment ready" : `${n}/10 characters minimum`;
+  if (ok && !wasOk) { ct.classList.remove("pulse"); void ct.offsetWidth; ct.classList.add("pulse"); }
+  wasOk = ok; ap.disabled = !ok;
+});
+
+const dlg = document.getElementById("notice");
+document.querySelectorAll(".ritem > button").forEach(b => b.addEventListener("click", () => {
+  const it = b.parentElement, open = !it.hasAttribute("data-open");
+  document.querySelectorAll(".ritem").forEach(x => { x.removeAttribute("data-open"); x.querySelector("button").setAttribute("aria-expanded", "false"); x.querySelector(".swap").dataset.s = "a"; });
+  if (open) { it.setAttribute("data-open", ""); b.setAttribute("aria-expanded", "true"); b.querySelector(".swap").dataset.s = "b"; }
+}));
+document.getElementById("later").addEventListener("click", () => dlg.close());
+document.getElementById("toq").addEventListener("click", () => dlg.close());
+dlg.querySelectorAll(".det a").forEach(a => a.addEventListener("click", () => dlg.close()));
+
+function show() {
+  let v = (location.hash || "#overview").slice(1);
+  if (!["overview", "queue", "request", "new", "notice"].includes(v)) v = "overview";
+  const base = v === "notice" ? "queue" : v;
+  document.querySelectorAll("[data-view]").forEach(el => el.hidden = el.id !== "v-" + base);
+  document.querySelectorAll(".pbar nav a").forEach(a => a.getAttribute("href") === "#" + v ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));
+  document.querySelectorAll("[data-nav]").forEach(a => a.dataset.nav === base ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));
+  document.getElementById("roleName").textContent = base === "request" || base === "queue" ? "Credit Officer 1" : "Relationship Manager";
+  if (v === "notice") { if (!dlg.open) dlg.showModal(); } else if (dlg.open) dlg.close();
+  window.scrollTo(0, 0);
+}
+addEventListener("hashchange", show); show();
+
+document.getElementById("theme").addEventListener("click", () => {
+  const r = document.documentElement, cur = r.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  r.dataset.theme = cur === "dark" ? "light" : "dark";
+});
+addEventListener("keydown", e => { if (e.key === "/" && document.activeElement.tagName !== "INPUT" && document.activeElement.tagName !== "TEXTAREA") { e.preventDefault(); document.getElementById("q").focus(); } });
+</script>
