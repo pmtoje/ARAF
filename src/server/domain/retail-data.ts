@@ -38,6 +38,8 @@ export const salaryMonthSchema = z.object({ month: z.string().regex(/^\d{4}-\d{2
 export const retailDataSchema = z.object({
   // Customer
   customerName: text().default(""),
+  /** DAO (account officer) code, asked for at the start of the request. */
+  daoCode: text(30).default(""),
   businessName: text().default(""),
   companyName: text().default(""),
   registrationNumber: text(50).default(""),

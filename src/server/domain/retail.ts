@@ -10,6 +10,8 @@
  * caller's transaction (see workflow.ts) with idempotency, row locks and lock_version.
  */
 import { assertPhotoReviewDone } from "./photo-review";
+import { assessmentGate, recordAnalystReview } from "./fi-governance";
+import { DAO_CODE_MESSAGE, normaliseDaoCode } from "@/lib/dao";
 import type { Db, Tx } from "../db";
 import { db, withTx } from "../db";
 import type { Ctx } from "../context";
@@ -72,7 +74,7 @@ import { bookFacility, reconcilePayment, completeFulfilment, beneficiaryRevalida
  * `retiredChannel` exists only for test scenarios that recreate requests started by Delight Officers before
  * that channel was retired; no server action passes it.
  */
-export async function createRetailDraft(ctx: Ctx, p: { initiatorRole: string; productCode: string; profile: string; structure?: string | null; applicantType: ApplicantType }, opts: { retiredChannel?: boolean } = {}) {
+export async function createRetailDraft(ctx: Ctx, p: { initiatorRole: string; productCode: string; profile: string; structure?: string | null; applicantType: ApplicantType; daoCode?: string | null }, opts: { retiredChannel?: boolean } = {}) {
   const actor = ctx.actor;
   if (!actor) throw forbidden();
   const retired = opts.retiredChannel === true && p.initiatorRole === "DELIGHT_OFFICER";
@@ -104,6 +106,8 @@ export async function createRetailDraft(ctx: Ctx, p: { initiatorRole: string; pr
     }
     if (p.structure && !rules.structures.some((s) => s.code === p.structure)) throw invalid("Choose a financing structure offered for this product.", { structure: "Structure not offered." });
     const structure = p.structure || (rules.structures.length === 1 ? rules.structures[0].code : null);
+    const daoCode = normaliseDaoCode(p.daoCode);
+    if (!daoCode) throw invalid(DAO_CODE_MESSAGE, { daoCode: DAO_CODE_MESSAGE });
     const seq = (await tx.query<{ n: string }>("SELECT nextval('application_ref_seq') AS n")).rows[0].n;
     const ref = `${RETAIL_REF_PREFIX}-${lagosDate(ctx.now).slice(0, 4)}-${String(seq).padStart(6, "0")}`;
     const app = (
@@ -114,8 +118,8 @@ export async function createRetailDraft(ctx: Ctx, p: { initiatorRole: string; pr
         [ref, p.applicantType, actor.staffId, p.initiatorRole, ra.region, ra.business_unit, ra.team, ctx.now, product.code, product.name, cfg.id, p.profile, structure],
       )
     ).rows[0];
-    await tx.query(`INSERT INTO application_versions (application_id, version_no, data, created_by, created_at) VALUES ($1,1,$2,$3,$4)`, [app.id, JSON.stringify(retailDataSchema.parse({})), actor.staffId, ctx.now]);
-    await audit(tx, ctx, { action: "DRAFT_CREATED", actorRole: p.initiatorRole, applicationId: app.id, stage: "DRAFT", details: { ref, productCode: product.code, profile: p.profile, customerCategory: p.profile, structure, applicantType: p.applicantType, configVersion: cfg.version } });
+    await tx.query(`INSERT INTO application_versions (application_id, version_no, data, created_by, created_at) VALUES ($1,1,$2,$3,$4)`, [app.id, JSON.stringify(retailDataSchema.parse({ daoCode })), actor.staffId, ctx.now]);
+    await audit(tx, ctx, { action: "DRAFT_CREATED", actorRole: p.initiatorRole, applicationId: app.id, stage: "DRAFT", details: { ref, daoCode, productCode: product.code, profile: p.profile, customerCategory: p.profile, structure, applicantType: p.applicantType, configVersion: cfg.version } });
     return { id: app.id, ref };
   });
 }
@@ -380,6 +384,7 @@ export async function retailReadiness(q: Db, appId: string, now: Date): Promise<
   blockers.push(...(await retailCreditBlockers(q, appId, now)));
 
   // --- customer
+  if (!normaliseDaoCode(data.daoCode)) e.daoCode = "DAO code is required.";
   const T = app.applicant_type;
   if (T === "INDIVIDUAL" && !data.customerName) e.customerName = "Customer name is required.";
   if (T === "ENTERPRISE") {
@@ -971,6 +976,8 @@ export async function retailDispatch(tx: Tx, ctx: Ctx, app: AppRow, task: TaskRo
       if (missing.length) throw gate(`Credit-stage documents outstanding: ${missing.map((m) => m.label).join(", ")}.`);
       const ben = await beneficiaryRevalidation(tx, app, ctx.now);
       if (ben.length) throw gate(`Beneficiary revalidation required: ${ben.join(" ")}`);
+      // Mandatory financial assessment (product rule), enforced here in the workflow engine.
+      await assessmentGate(tx, app.id, rules, task.id, ctx.now);
       await recordDecision(tx, ctx, app, task, a, reason, null, finalRow.id);
       await completeTask(tx, ctx, task, a, { retailAssessmentId: finalRow.id, configVersion: cfg.version, attestedAt: ctx.now.toISOString() });
       if (isCx(app)) return enterUnitHead(tx, ctx, app);
@@ -1068,6 +1075,8 @@ export interface FinalAssessmentForm {
   annualInflowKobo?: number | null;
   /** Why the reviewer changed any input from the initiator's preliminary assessment. */
   adjustmentNote?: string;
+  /** Why the reviewer changed a figure verified by Automatic Statement Analysis (required when they did). */
+  verifiedChangeReason?: string;
   incomeBasisNote: string;
   statementFrom: string | null;
   statementTo: string | null;
@@ -1145,6 +1154,9 @@ export async function recordFinalAssessment(ctx: Ctx, appId: string, f: FinalAss
     const note = (f.adjustmentNote ?? "").trim();
     if (changes.length && note.length < 5) throw invalid("Explain why the assessment inputs changed.", { adjustmentNote: `You changed ${changes.map((c) => c.field).join(", ")} from the preliminary assessment. Give the reason and the evidence relied on.` });
     const r = await storeAssessment(tx, ctx, app, "FINAL", cfg, rules, input, task.assignee_role);
+    // Link to the financial assessment it relied on (automated or approved manual) and keep the adjustment history.
+    const review = await recordAnalystReview(tx, ctx, { appId: app.id, assessmentId: r.id, actorRole: task.assignee_role, stage: task.stage, input, verifiedChangeReason: f.verifiedChangeReason, note });
+    if (review?.analysisId) await (await import("./fi-report")).saveFinancialReport(tx, ctx, review.analysisId);
     if (changes.length)
       await audit(tx, ctx, {
         action: "CREDIT_ASSESSMENT_ADJUSTED",
@@ -1195,7 +1207,7 @@ export async function saveProposal(ctx: Ctx, appId: string, content: Partial<Pro
 
 // ------------------------------------------------------------------ exceptions
 
-export async function requestException(ctx: Ctx, appId: string, p: { type: "AFS" | "DSR"; reason: string; evidenceDocumentIds: string[] }) {
+export async function requestException(ctx: Ctx, appId: string, p: { type: "AFS" | "DSR" | "MANUAL_ASSESSMENT"; reason: string; evidenceDocumentIds: string[] }) {
   const actor = ctx.actor;
   if (!actor) throw forbidden();
   return withTx(async (tx) => {
@@ -1203,7 +1215,8 @@ export async function requestException(ctx: Ctx, appId: string, p: { type: "AFS"
     if (app.workflow !== "RETAIL") throw invalid("Not a retail application.");
     const task = (await tx.query("SELECT * FROM tasks WHERE application_id = $1 AND status = 'OPEN'", [appId])).rows[0];
     const isInitiatorEditing = app.initiator_id === actor.staffId && (app.stage === "DRAFT" || (task?.stage === "INITIATOR_CORRECTION" && task.assignee_id === actor.staffId));
-    const isFirstReviewer = p.type === "DSR" && task?.stage === "FIRST_CREDIT_REVIEW" && task.assignee_id === actor.staffId;
+    const isFirstReviewer = (p.type === "DSR" || p.type === "MANUAL_ASSESSMENT") && ["FIRST_CREDIT_REVIEW", "CREDIT_CORRECTION"].includes(task?.stage) && task.assignee_id === actor.staffId;
+    if (p.type === "MANUAL_ASSESSMENT" && !isFirstReviewer) throw forbidden("A Manual Financial Assessment exception is requested by the assigned credit reviewer.");
     if (!isInitiatorEditing && !isFirstReviewer) throw forbidden("Exceptions are requested by the initiator (draft or correction) or, for DSR, by the first credit reviewer.");
     const cfg = app.stage === "DRAFT" ? await effectiveConfig(tx, app.product_code!, ctx.now) : await configById(tx, app.product_config_id!);
     const rules = cfg ? profileRules(cfg.config, app.customer_profile) : null;
@@ -1214,6 +1227,10 @@ export async function requestException(ctx: Ctx, appId: string, p: { type: "AFS"
       if (Number(app.requested_amount_kobo ?? 0) <= rules.afs.thresholdKobo) throw invalid(`AFS is required only above ${formatKobo(rules.afs.thresholdKobo)}.`);
       approverRole = rules.afs.exceptionApproverRole;
       if (!approverRole) throw gate("The AFS exception authority is not configured. An administrator must configure the approving role before an exception can be requested.");
+    } else if (p.type === "MANUAL_ASSESSMENT") {
+      if (!rules.statementAnalysis?.required) throw gate("Automatic Statement Analysis is not mandatory for this product; record the final assessment as usual.");
+      approverRole = rules.statementAnalysis.manualExceptionApproverRole;
+      if (!approverRole) throw gate("Manual Financial Assessment exceptions are not permitted by this product's configuration.");
     } else {
       if (!rules.dsr.exceptionAllowed) throw gate("DSR exceptions are not permitted by this product's configuration.");
       approverRole = rules.dsr.exceptionApproverRole;

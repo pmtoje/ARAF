@@ -693,6 +693,23 @@ export function SettingsEditor(p: EditorProps) {
                 <Select path={at(k, "afs.exceptionApproverRole")} label="Who may waive audited accounts" value={r.afs.exceptionApproverRole} options={p.approverRoles} onChange={(v) => upd((c) => (c.profiles[k].afs.exceptionApproverRole = v))} />
               </div>
             )}
+            <div className="grid-2">
+              <YesNo
+                path={at(k, "statementAnalysis.required")}
+                label="Automatic Statement Analysis required before credit approval"
+                value={r.statementAnalysis?.required ?? false}
+                onChange={(v) => upd((c) => (c.profiles[k].statementAnalysis = { required: !!v, manualExceptionApproverRole: c.profiles[k].statementAnalysis?.manualExceptionApproverRole ?? null }))}
+              />
+              {r.statementAnalysis?.required && (
+                <Select
+                  path={at(k, "statementAnalysis.manualExceptionApproverRole")}
+                  label="Who may approve a Manual Financial Assessment (blank = not permitted)"
+                  value={r.statementAnalysis.manualExceptionApproverRole}
+                  options={p.approverRoles}
+                  onChange={(v) => upd((c) => (c.profiles[k].statementAnalysis = { required: true, manualExceptionApproverRole: v }))}
+                />
+              )}
+            </div>
           </>
 )})}
       <Select path="servicing.restructureApproverRole" label="Who may approve a restructure" value={cfg.servicing?.restructureApproverRole} options={p.approverRoles} onChange={(v) => upd((c) => (c.servicing = { ...(c.servicing ?? {}), restructureApproverRole: v }))} />

@@ -140,7 +140,7 @@ export async function createSubmittedCase(opts: {
   const role = opts.initiator.startsWith("ANM") ? "ANM" : opts.initiator;
   const ctx = await ctxFor(email, now);
   const type = opts.type ?? "INDIVIDUAL";
-  const { id } = await createDraft(ctx, { initiatorRole: role, applicantType: type });
+  const { id } = await createDraft(ctx, { daoCode: "DAO-1001", initiatorRole: role, applicantType: type });
   const rbe = role === "RM" ? (await db.query("SELECT id FROM staff WHERE email = $1", [opts.rbeEmail ?? "rbe.lagos@altbank.ng"])).rows[0].id : null;
   await saveDraft(ctx, id, {
     data: { ...sampleData(type, opts.amountKobo, now), rbeId: rbe },

@@ -99,7 +99,7 @@ describe("product configuration", () => {
 
   it("missing Alt Power configuration visibly blocks submission (no inherited parameters)", async () => {
     const ctx = await ctxFor("rm.bola@altbank.ng");
-    const { id } = await createRetailDraft(ctx, { initiatorRole: "RM", productCode: "ALT_POWER", profile: "BUSINESS_OWNER", applicantType: "ENTERPRISE" });
+    const { id } = await createRetailDraft(ctx, { daoCode: "DAO-1001", initiatorRole: "RM", productCode: "ALT_POWER", profile: "BUSINESS_OWNER", applicantType: "ENTERPRISE" });
     const r = await retailReadiness(db, id, new Date());
     expect(r.ready).toBe(false);
     const text = r.blockers.join(" ");
@@ -108,7 +108,7 @@ describe("product configuration", () => {
     expect(text).toMatch(/financing structure/);
     await expect(submitApplication(ctx, id, key())).rejects.toThrow(/not ready/);
     // Alt Power salary earners: DSR 33% supplied, but denominator/statement period/structure still required
-    const { id: s } = await createRetailDraft(ctx, { initiatorRole: "RM", productCode: "ALT_POWER", profile: "SALARY_EARNER", applicantType: "INDIVIDUAL" });
+    const { id: s } = await createRetailDraft(ctx, { daoCode: "DAO-1001", initiatorRole: "RM", productCode: "ALT_POWER", profile: "SALARY_EARNER", applicantType: "INDIVIDUAL" });
     const r2 = await retailReadiness(db, s, new Date());
     expect(r2.blockers.join(" ")).toMatch(/denominator/);
     expect(r2.rules!.dsr.maxPercent).toBe("33");
@@ -356,8 +356,8 @@ describe("Vendor Financing", () => {
   it("registered businesses only, ₦50 million limit and 12-month tenor", async () => {
     await vf();
     const ctx = await ctxFor("rm.bola@altbank.ng");
-    await expect(createRetailDraft(ctx, { initiatorRole: "RM", productCode: "VENDOR_FINANCING", profile: "BUSINESS_OWNER", applicantType: "INDIVIDUAL" })).rejects.toThrow(/available only to/);
-    await expect(createRetailDraft(ctx, { initiatorRole: "RM", productCode: "VENDOR_FINANCING", profile: "SALARY_EARNER", applicantType: "INDIVIDUAL" })).rejects.toThrow(/not available/);
+    await expect(createRetailDraft(ctx, { daoCode: "DAO-1001", initiatorRole: "RM", productCode: "VENDOR_FINANCING", profile: "BUSINESS_OWNER", applicantType: "INDIVIDUAL" })).rejects.toThrow(/available only to/);
+    await expect(createRetailDraft(ctx, { daoCode: "DAO-1001", initiatorRole: "RM", productCode: "VENDOR_FINANCING", profile: "SALARY_EARNER", applicantType: "INDIVIDUAL" })).rejects.toThrow(/not available/);
     const atLimit = await vfCase({ amountKobo: N(50_000_000), withAfs: true, submit: false, incomeBasisKobo: N(50_000_000), proposedMonthlyKobo: N(4_000_000) });
     expect((await retailReadiness(db, atLimit, new Date())).fieldErrors.requestedAmountKobo).toBeUndefined();
     const over = await vfCase({ amountKobo: N(50_000_000) + 1, withAfs: true, submit: false });
@@ -548,7 +548,7 @@ describe("form validation", () => {
     expect(bvnError("01234567890")).toBeNull();
     await vf();
     const ctx = await ctxFor("rm.bola@altbank.ng");
-    const { id } = await createRetailDraft(ctx, { initiatorRole: "RM", productCode: "VENDOR_FINANCING", profile: "BUSINESS_OWNER", applicantType: "ENTERPRISE" });
+    const { id } = await createRetailDraft(ctx, { daoCode: "DAO-1001", initiatorRole: "RM", productCode: "VENDOR_FINANCING", profile: "BUSINESS_OWNER", applicantType: "ENTERPRISE" });
     await expect(saveRetailDraft(ctx, id, { data: { phone: "0803123456" } })).rejects.toThrow(/not valid/);
     await expect(saveRetailDraft(ctx, id, { data: {}, bvn: "123456789012" })).rejects.toThrow(/not valid/);
     await saveRetailDraft(ctx, id, { data: { phone: "08031234567" }, bvn: "00012345678" });
@@ -559,8 +559,8 @@ describe("form validation", () => {
 
   it("role selection grants nothing: only provisioned roles can initiate", async () => {
     await vf();
-    await expect(createRetailDraft(await ctxFor("tl.lagos@altbank.ng"), { initiatorRole: "RM", productCode: "VENDOR_FINANCING", profile: "BUSINESS_OWNER", applicantType: "ENTERPRISE" })).rejects.toThrow(/do not hold/);
-    await expect(createRetailDraft(await ctxFor("rm.bola@altbank.ng"), { initiatorRole: "DELIGHT_OFFICER", productCode: "VENDOR_FINANCING", profile: "BUSINESS_OWNER", applicantType: "ENTERPRISE" })).rejects.toThrow(/Altphones only/);
+    await expect(createRetailDraft(await ctxFor("tl.lagos@altbank.ng"), { daoCode: "DAO-1001", initiatorRole: "RM", productCode: "VENDOR_FINANCING", profile: "BUSINESS_OWNER", applicantType: "ENTERPRISE" })).rejects.toThrow(/do not hold/);
+    await expect(createRetailDraft(await ctxFor("rm.bola@altbank.ng"), { daoCode: "DAO-1001", initiatorRole: "DELIGHT_OFFICER", productCode: "VENDOR_FINANCING", profile: "BUSINESS_OWNER", applicantType: "ENTERPRISE" })).rejects.toThrow(/Altphones only/);
   });
 
   it("bank selection alone never approves a beneficiary; verification is maker-checker", async () => {

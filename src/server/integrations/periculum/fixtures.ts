@@ -30,6 +30,15 @@ interface Spec {
   status: string;
   password: string | null;
   polls: number;
+  /** Documented risk fields (variable definitions): defaults are a clean statement. */
+  bettingTransactions: number;
+  gamblingRate: number;
+  returnedCheques: number;
+  accountSweep: boolean;
+  inflowIrregularity: number;
+  lowBalanceDays: number;
+  missingTransactions: number;
+  edited: boolean;
 }
 
 interface Stored {
@@ -74,6 +83,14 @@ export function parseFixtureSpec(text: string): Spec {
     status: kv.status ?? "PROCESSED",
     password: kv.password ?? null,
     polls: Math.max(0, n("polls", 1)),
+    bettingTransactions: n("betting"),
+    gamblingRate: n("gamblingRate"),
+    returnedCheques: n("returnedCheques"),
+    accountSweep: kv.sweep === "yes",
+    inflowIrregularity: n("irregularity", 12),
+    lowBalanceDays: n("lowBalanceDays", 8),
+    missingTransactions: n("missing"),
+    edited: kv.edited === "yes",
   };
 }
 
@@ -144,6 +161,8 @@ function fixtureAnalytics(s: Stored, status: string) {
     createdDate: s.createdDate,
     processingStatus: status,
     confidenceOnParsing: 0.98,
+    pdfCreatedDate: "2026-11-01T09:00:00",
+    pdfModifiedDate: spec.edited ? "2026-11-20T15:42:00" : "2026-11-01T09:00:00",
     cashFlowAnalysis: {
       totalCreditTurnover: sum(credits),
       totalDebitTurnOver: sum(debits),
@@ -168,10 +187,18 @@ function fixtureAnalytics(s: Stored, status: string) {
       totalLoanRepaymentAmount: sum(loanTx),
       averageMonthlyLoanRepaymentAmount: loanTx.length ? sum(loanTx) / months.length : 0,
       numberRepaymentTransactions: loanTx.length,
+      gamblingStatus: spec.bettingTransactions > 0 ? "Yes" : "No",
+      gamblingRate: spec.gamblingRate,
+      numberOfBettingTransactions: spec.bettingTransactions,
+      accountSweep: spec.accountSweep ? "Yes" : "No",
+      percentOfInflowIrregularity: spec.inflowIrregularity,
       loanRepaymentTransactions: loanTx.map((t) => ({ date: `${t.date} 00:00:00`, amount: t.amount, description: t.description })),
     },
     transactionPatternAnalysis: {
       totalNumberOfTransactions: tx.length,
+      returnCheque: spec.returnedCheques,
+      missingTransactions: String(spec.missingTransactions),
+      percentNumberOfDaysBalanceWasLessThan10ThousandNaira: spec.lowBalanceDays,
       noOfSelfTransferOutflows: selfOut.length,
       selfTransferOutflowAmount: sum(selfOut),
       selfTransferOutflowTransactions: selfOut.map((t) => ({ date: `${t.date} 00:00:00`, amount: t.amount })),

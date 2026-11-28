@@ -29,6 +29,11 @@ import { formatKobo, koboToNairaString } from "@/server/money";
 import { formatLagos, lagosDate, addDaysToDateString } from "@/server/time";
 import { maskWithLast4 } from "@/server/mask";
 import { UploadPanel } from "@/components/UploadPanel";
+import { currentAnalysis } from "@/server/domain/statement-analysis";
+import { savedIntelligence } from "@/server/domain/financial-intelligence";
+import { savedRecommendation } from "@/server/domain/credit-recommendation";
+import { verifiedDefaults } from "./FinancialIntelligence";
+import { analysisFreshness, reviewsFor } from "@/server/domain/fi-governance";
 import { CrmsOkay, GenerateOffer, ReasonButton, RevealIdentifiers, TaskButton } from "./CaseClient";
 import { ContractSubmit, BookFacilityForm, BusinessDecisionForm, DocReview, ExceptionDecision, FinalAssessmentForm, FulfilmentForm, PaymentEventForm, ReasonForm, ServicingForms } from "./RetailClient";
 
@@ -61,6 +66,7 @@ async function KycReview({ c, b }: { c: Case; b: Awaited<ReturnType<typeof retai
         <div><dt>Business address</dt><dd>{data.businessAddress || "—"}</dd></div>
         <div><dt>Sector</dt><dd>{data.businessSector || "—"}</dd></div>
         <div><dt>Vendor / supplier</dt><dd>{vendor ?? "—"}</dd></div>
+        <div><dt>DAO code</dt><dd>{data.daoCode || "—"}</dd></div>
         <div><dt>Relationship Manager</dt><dd>{rm} · {formatKobo(Number(app.requested_amount_kobo ?? 0))}{data.tenorMonths ? ` over ${data.tenorMonths} months` : ""}{data.purpose ? ` · ${data.purpose}` : ""}</dd></div>
         <div><dt>Supporting documents</dt><dd>{docs.length} on file (see Documents)</dd></div>
       </dl>
@@ -212,6 +218,7 @@ export async function RetailOverview({ c }: { c: Case }) {
             <tr><th>Customer category</th><td><span className={`badge ${app.customer_profile === "SALARY_EARNER" ? "badge-blue" : ""}`}>{PROFILE_LABELS[app.customer_profile as CustomerProfile]}</span></td></tr>
             <tr><th>Product</th><td>{app.product_label} · {app.applicant_type.toLowerCase()}</td></tr>
             <tr><th>Customer</th><td>{app.customer_name}</td></tr>
+            <tr><th>DAO code</th><td>{data.daoCode || "—"}</td></tr>
             {app.applicant_type !== "INDIVIDUAL" && <tr><th>CAC registration</th><td className="mono">{data.registrationNumber}</td></tr>}
             <tr><th>Phone · email</th><td className="mono">{data.phone}{data.email ? ` · ${data.email}` : ""}</td></tr>
             <tr><th>{app.customer_profile === "SALARY_EARNER" ? "Customer address" : "Business address"}</th><td>{data.businessAddress || "—"}</td></tr>
@@ -480,6 +487,17 @@ export async function RetailActionPanel({ c, task, doneHref }: { c: Case; task: 
       const credit = rules?.documents.filter((d) => d.stage === "CREDIT" && d.requirement !== "OPTIONAL") ?? [];
       const dsrEx = b.exceptions.find((e: { type: string; status: string }) => e.type === "DSR" && e.status === "APPROVED");
       const benProblems = await beneficiaryRevalidation(db, app, now);
+      const fiA = await currentAnalysis(db, app.id);
+      const fiS = fiA ? { analysis: fiA, statements: [], intelligence: await savedIntelligence(db, fiA.id), recommendation: await savedRecommendation(db, fiA.id), bureau: [], isAnalyst: true, detail: true, freshness: await analysisFreshness(db, fiA) } : null;
+      const verified = !current && fiS ? verifiedDefaults(fiS) : null;
+      if (fiS?.recommendation)
+        body.push(
+          <p key="fi" className="small" style={{ margin: 0 }}>
+            Automatic Statement Analysis v{fiA!.version}: <strong>{fiS.recommendation.outcomeLabel}</strong>
+            {fiS.recommendation.dsr.percent ? ` · DSR ${fiS.recommendation.dsr.percent}%` : ""}
+            {fiA!.source === "FIXTURE" ? " · test data" : ""} · <Link href={`/requests/${app.id}?tab=intelligence`}>open the analysis</Link>
+          </p>,
+        );
       body.push(
         <ul key="cl" className="checklist">
           <Check ok={!!current && b.final.result === "PASS"}>Final assessment for the current version{finalOut ? `: ${finalOut.result}${finalOut.dsr ? `, DSR ${finalOut.dsr.percent}%` : ""}` : ""}{dsrEx ? " (approved DSR exception on file)" : ""}</Check>
@@ -517,6 +535,7 @@ export async function RetailActionPanel({ c, task, doneHref }: { c: Case; task: 
                 denominatorLabel: rules?.dsr.denominator ? DSR_DENOMINATOR_LABELS[rules.dsr.denominator].toLowerCase() : "income basis",
                 capApplies: !!rules?.principalTurnoverCap.applies,
               }}
+              verified={verified}
             />
           </div>
         </details>,
@@ -537,9 +556,33 @@ export async function RetailActionPanel({ c, task, doneHref }: { c: Case; task: 
     case "DIVISIONAL_HEAD_REVIEW": {
       if (finalOut) body.push(<AssessmentSummary key="a" out={finalOut} title="Approved assessment snapshot" meta={`Configuration v${b.final.rules.configVersion} · ${b.final.assessor_name}`} />);
       else body.push(<Blocked key="a">No final assessment on record.</Blocked>);
+      {
+        // The saved financial intelligence report and the analyst's confirmation, for every approver.
+        const fa = await currentAnalysis(db, app.id);
+        const rec = fa ? await savedRecommendation(db, fa.id) : null;
+        const rv = (await reviewsFor(db, app.id))[0];
+        if (fa || rv)
+          body.push(
+            <p key="fi" className="small" style={{ margin: 0 }}>
+              {rv?.kind === "MANUAL" ? (
+                <strong>Manual Financial Assessment (approved exception)</strong>
+              ) : (
+                <>
+                  Automatic Statement Analysis v{fa!.version}: <strong>{rec?.outcomeLabel ?? fa!.status.toLowerCase()}</strong>
+                  {rec?.dsr.percent ? ` · DSR ${rec.dsr.percent}% (limit ${rec.dsr.thresholdPercent}%)` : ""}
+                  {fa!.source === "FIXTURE" ? " · test data" : ""}
+                </>
+              )}
+              {rv && rv.kind !== "MANUAL" ? ` · ${rv.kind === "ADJUSTED" ? "adjusted" : "confirmed"} by ${rv.actor_name}` : ""} · <Link href={`/requests/${app.id}?tab=intelligence`}>open the report</Link>
+            </p>,
+          );
+      }
       const route = app.route;
       if (stage === "SECOND_CREDIT_REVIEW" && route !== 1) body.push(<TaskButton key="p" hidden={hidden} action="PROCEED" label="Proceed (independent credit review)" doneHref={doneHref} verify={verifyFor("PROCEED", "Proceed (concur)")} />);
-      else body.push(<TaskButton key="p" hidden={hidden} action="APPROVE" label="Approve (credit)" doneHref={doneHref} verify={verifyFor("APPROVE", stage === "DIVISIONAL_HEAD_REVIEW" ? "Final approval" : stage === "UNIT_HEAD_REVIEW" ? "Unit Head approval" : "Concur and approve")} />);
+      else {
+        const uh = stage === "UNIT_HEAD_REVIEW";
+        body.push(<TaskButton key="p" hidden={hidden} action="APPROVE" label={uh ? "Approve for Disbursement" : "Approve (credit)"} doneHref={doneHref} verify={verifyFor("APPROVE", stage === "DIVISIONAL_HEAD_REVIEW" ? "Final approval" : uh ? "Approve for Disbursement" : "Concur and approve")} />);
+      }
       if (stage !== "SECOND_CREDIT_REVIEW" || route === 1) secondary.push(["RETURN", "Return to the first credit reviewer", false]);
       secondary.push(["REJECT", "Decline", true]);
       break;
@@ -662,7 +705,7 @@ export async function RetailCaseTools({ c, staffId, roles }: { c: Case; staffId:
   if (app.initiator_id === staffId && !closed && !fac) out.push(<ReasonForm key="w" kind="withdraw" hidden={{ applicationId: app.id }} label="Withdraw request" danger />);
   if ((roles.includes("SUPER_ADMIN") || roles.includes("HEAD_OF_RETAIL_SALES")) && !closed) out.push(<ReasonForm key="s" kind={app.suspended_at ? "resume" : "suspend"} hidden={{ applicationId: app.id }} label={app.suspended_at ? "Resume request" : "Suspend request"} />);
   const pending = (await db.query("SELECT * FROM policy_exceptions WHERE application_id = $1 AND status = 'REQUESTED'", [app.id])).rows.filter((e: { approver_role: string; requested_by: string }) => roles.includes(e.approver_role) && e.requested_by !== staffId && app.initiator_id !== staffId);
-  for (const e of pending) out.push(<div key={e.id} className="summary-box small"><strong>{e.type} exception requested:</strong> {e.reason}<ExceptionDecision exceptionId={e.id} /></div>);
+  for (const e of pending) out.push(<div key={e.id} className="summary-box small"><strong>{e.type === "MANUAL_ASSESSMENT" ? "Manual Financial Assessment" : e.type} exception requested:</strong> {e.reason}<ExceptionDecision exceptionId={e.id} /></div>);
   if (fac && roles.includes("COLLECTIONS_OFFICER") && ["ACTIVE", "IN_ARREARS", "RESTRUCTURED", "SETTLED"].includes(fac.status)) {
     const pos = await facilityPosition(db, fac.id, lagosDate(new Date()));
     const evidence = c.documents.filter((d) => d.category === "REPAYMENT_EVIDENCE" && !d.superseded_at && d.scan_status === "CLEAN").map((d) => ({ id: d.id, label: d.filename }));

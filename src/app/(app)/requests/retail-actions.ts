@@ -33,6 +33,7 @@ export async function createRetailDraftAction(_p: ActionState, fd: FormData): Pr
         profile: str(fd, "profile"),
         structure: str(fd, "structure") || null,
         applicantType: str(fd, "applicantType") as ApplicantType,
+        daoCode: str(fd, "daoCode"),
       })
     ).id;
   } catch (e) {
@@ -156,7 +157,7 @@ export async function proposeBeneficiaryAction(_p: ActionState, fd: FormData): P
 export async function requestExceptionAction(_p: ActionState, fd: FormData): Promise<ActionState> {
   const { ctx } = await requireUser();
   try {
-    await requestException(ctx, str(fd, "applicationId"), { type: str(fd, "type") as "AFS" | "DSR", reason: str(fd, "reason"), evidenceDocumentIds: fd.getAll("evidence").map(String) });
+    await requestException(ctx, str(fd, "applicationId"), { type: str(fd, "type") as "AFS" | "DSR" | "MANUAL_ASSESSMENT", reason: str(fd, "reason"), evidenceDocumentIds: fd.getAll("evidence").map(String) });
     return { ok: true, message: "Exception requested. The configured authority has been notified.", nonce: Date.now() };
   } catch (e) {
     return toActionError(e);
@@ -195,6 +196,7 @@ export async function finalAssessmentAction(_p: ActionState, fd: FormData): Prom
       incomeBasisKobo: income,
       annualInflowKobo: annualInflow,
       adjustmentNote: str(fd, "adjustmentNote"),
+      verifiedChangeReason: str(fd, "verifiedChangeReason"),
       incomeBasisNote: str(fd, "incomeBasisNote"),
       statementFrom: str(fd, "statementFrom") || null,
       statementTo: str(fd, "statementTo") || null,

@@ -162,6 +162,13 @@ export const profileRulesSchema = z.object({
   rmProposalRequired: z.boolean(),
   businessPhotos: z.object({ minDistinct: z.number().int().min(0).max(20), rmPhotoRequired: z.boolean() }).default({ minDistinct: 0, rmPhotoRequired: false }),
   afs: z.object({ thresholdKobo: kobo.nullable(), exceptionApproverRole: roleRef.nullable() }).nullable().default(null),
+  /**
+   * Automatic Statement Analysis. When required, credit approval needs a current completed analysis or an approved
+   * Manual Financial Assessment exception (decided by the configured role). Off unless configured and approved.
+   */
+  statementAnalysis: z
+    .object({ required: z.boolean(), manualExceptionApproverRole: roleRef.nullable() })
+    .default({ required: false, manualExceptionApproverRole: null }),
   documents: z.array(docRequirementSchema),
 });
 export type ProfileRules = z.infer<typeof profileRulesSchema>;

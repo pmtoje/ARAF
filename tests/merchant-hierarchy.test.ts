@@ -32,9 +32,9 @@ describe("Product access by role", () => {
     const id = (await db.query("INSERT INTO staff (email, full_name) VALUES ('mo.only@altbank.ng','MO Only') RETURNING id")).rows[0].id;
     await db.query("INSERT INTO role_assignments (staff_id, role) VALUES ($1,'MERCHANT_OFFICER')", [id]);
     const ctx = await ctxFor("mo.only@altbank.ng");
-    await expect(createRetailDraft(ctx, { initiatorRole: "MERCHANT_OFFICER", productCode: "VENDOR_FINANCING", profile: "BUSINESS_OWNER", applicantType: "ENTERPRISE" })).rejects.toBeInstanceOf(DomainError);
-    await expect(createRetailDraft(ctx, { initiatorRole: "RM", productCode: "VENDOR_FINANCING", profile: "BUSINESS_OWNER", applicantType: "ENTERPRISE" })).rejects.toBeInstanceOf(DomainError);
-    expect((await createDraft(ctx, { initiatorRole: "MERCHANT_OFFICER", applicantType: "INDIVIDUAL" })).id).toBeTruthy();
+    await expect(createRetailDraft(ctx, { daoCode: "DAO-1001", initiatorRole: "MERCHANT_OFFICER", productCode: "VENDOR_FINANCING", profile: "BUSINESS_OWNER", applicantType: "ENTERPRISE" })).rejects.toBeInstanceOf(DomainError);
+    await expect(createRetailDraft(ctx, { daoCode: "DAO-1001", initiatorRole: "RM", productCode: "VENDOR_FINANCING", profile: "BUSINESS_OWNER", applicantType: "ENTERPRISE" })).rejects.toBeInstanceOf(DomainError);
+    expect((await createDraft(ctx, { daoCode: "DAO-1001", initiatorRole: "MERCHANT_OFFICER", applicantType: "INDIVIDUAL" })).id).toBeTruthy();
   });
 
   it("the initial Lead and Head are provisioned by role, with the Lead reporting to the Head", async () => {

@@ -17,7 +17,7 @@ const parts = (b: Buffer) => Array.from({ length: Math.ceil(b.length / CHUNK_BYT
 let appId: string;
 beforeEach(async () => {
   await resetDb();
-  appId = (await createDraft(await ctxFor("rm.ade@altbank.ng"), { initiatorRole: "RM", applicantType: "INDIVIDUAL" })).id;
+  appId = (await createDraft(await ctxFor("rm.ade@altbank.ng"), { daoCode: "DAO-1001", initiatorRole: "RM", applicantType: "INDIVIDUAL" })).id;
 });
 
 describe("Large documents in resumable parts", () => {

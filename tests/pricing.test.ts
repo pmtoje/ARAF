@@ -239,7 +239,7 @@ describe("Super Admin pricing settings", () => {
     const sa = await ctxFor("superadmin@altbank.ng");
     await updatePricingSettings(sa, { maxTenorMonths: 4, shortRatePercent: "10", longRatePercent: "15", reason: "Shorter maximum" });
     const rm = await ctxFor("rm.ade@altbank.ng");
-    const { id } = await createDraft(rm, { initiatorRole: "RM", applicantType: "INDIVIDUAL" });
+    const { id } = await createDraft(rm, { daoCode: "DAO-1001", initiatorRole: "RM", applicantType: "INDIVIDUAL" });
     await saveDraft(rm, id, { data: { tenorMonths: 6 } });
     const err = await submitApplication(rm, id, key()).catch((e) => e);
     expect(err.fields.tenorMonths).toMatch(/from 1 to 4/);

@@ -12,6 +12,8 @@ import { fixtureFetch, resetFixtureVendor } from "@/server/integrations/periculu
 import { analysisStatements, currentAnalysis, handlePericulumWebhook, processStatementAnalysis, retryStatements, startStatementAnalysis, statementPayload } from "@/server/domain/statement-analysis";
 import { addDaysToDateString, lagosDate } from "@/server/time";
 import { bureauChecksFor, processBureauChecks } from "@/server/domain/bureau-check";
+import { savedIntelligence } from "@/server/domain/financial-intelligence";
+import { savedRecommendation, whatIf } from "@/server/domain/credit-recommendation";
 
 const N = (n: number) => n * 100;
 const ENV = ["PERICULUM_ENABLED", "PERICULUM_MODE", "PERICULUM_WEBHOOK_SECRET", "PERICULUM_MAX_CONCURRENT", "PERICULUM_MAX_ATTEMPTS", "PERICULUM_BLACKLIST_ENABLED"];
@@ -162,6 +164,20 @@ describe("Automatic Statement Analysis — one action, the whole pipeline", () =
     expect(analytics!._fixture).toMatch(/not a Periculum result/);
     expect(analytics!.cashFlowAnalysis.numberOfTransactingMonths).toBe(6);
     expect((await statementPayload<unknown[]>(db, processed[0].id, "TRANSACTIONS"))!.length).toBeGreaterThan(10);
+    // Phase 3: the financial intelligence is built and saved automatically from the stored results.
+    const fi = await savedIntelligence(db, r.id);
+    expect(fi).toMatchObject({ statementsAnalysed: 2, uniqueAccounts: 2 });
+    expect(fi!.accounts.every((a) => a.ownership === "VERIFIED")).toBe(true);
+    expect(fi!.monthly.adjustedInflowKobo).toBeGreaterThan(0);
+    // Phase 4: the recommendation is generated and saved automatically too.
+    const rec = await savedRecommendation(db, r.id);
+    expect(rec).toMatchObject({ version: "araf-credit-recommendation@1", outcomeLabel: expect.any(String) });
+    expect(rec!.commentary.length).toBeGreaterThan(0);
+    // Changing the amount or tenor recalculates from the saved assessment: no new Periculum request.
+    const callsBefore = net.calls.length;
+    const changed = await whatIf(db, r.id, new Date(), { principalKobo: N(1_000_000), tenorMonths: 6 });
+    expect(changed).toMatchObject({ requested: { principalKobo: N(1_000_000), tenorMonths: 6 } });
+    expect(net.calls.length).toBe(callsBefore);
     const events = (await db.query("SELECT action FROM audit_events WHERE application_id = $1 AND action LIKE 'STATEMENT_ANALYSIS%' ORDER BY id", [id])).rows.map((x) => x.action);
     expect(events).toEqual(["STATEMENT_ANALYSIS_INITIATED", "STATEMENT_ANALYSIS_COMPLETED"]);
     expect((await db.query("SELECT count(*)::int AS n FROM notifications WHERE kind = 'STATEMENT_ANALYSIS' AND recipient_id = $1", [analyst.actor!.staffId])).rows[0].n).toBe(1);

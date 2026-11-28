@@ -83,18 +83,18 @@ describe("Part B: customer type and product access", () => {
   });
 
   it("15. a salaried customer cannot be started on WakeelBoost through the API", async () => {
-    const e = await fails(createDraft(await ctxFor(RM), { initiatorRole: "RM", applicantType: "INDIVIDUAL", customerCategory: "SALARY_EARNER" }), "VALIDATION");
+    const e = await fails(createDraft(await ctxFor(RM), { daoCode: "DAO-1001", initiatorRole: "RM", applicantType: "INDIVIDUAL", customerCategory: "SALARY_EARNER" }), "VALIDATION");
     expect(e.message).toMatch(/business owners only/);
   });
 
   it("16. a salaried customer cannot be started on Vendor Financing through the API", async () => {
-    await fails(createRetailDraft(await ctxFor(RM), { initiatorRole: "RM", productCode: "VENDOR_FINANCING", profile: "SALARY_EARNER", applicantType: "INDIVIDUAL" }), "VALIDATION");
+    await fails(createRetailDraft(await ctxFor(RM), { daoCode: "DAO-1001", initiatorRole: "RM", productCode: "VENDOR_FINANCING", profile: "SALARY_EARNER", applicantType: "INDIVIDUAL" }), "VALIDATION");
   });
 
   it("17, 23. business-owner origination still works; the category persists and is audited (WakeelBoost included)", async () => {
-    const vf = await createRetailDraft(await ctxFor(RM), { initiatorRole: "RM", productCode: "VENDOR_FINANCING", profile: "BUSINESS_OWNER", applicantType: "ENTERPRISE" });
-    const wb = await createDraft(await ctxFor(RM), { initiatorRole: "RM", applicantType: "ENTERPRISE", customerCategory: "BUSINESS_OWNER" });
-    const ad = await createRetailDraft(await ctxFor(RM), { initiatorRole: "RM", productCode: "ALT_DRIVE", profile: "SALARY_EARNER", applicantType: "INDIVIDUAL" });
+    const vf = await createRetailDraft(await ctxFor(RM), { daoCode: "DAO-1001", initiatorRole: "RM", productCode: "VENDOR_FINANCING", profile: "BUSINESS_OWNER", applicantType: "ENTERPRISE" });
+    const wb = await createDraft(await ctxFor(RM), { daoCode: "DAO-1001", initiatorRole: "RM", applicantType: "ENTERPRISE", customerCategory: "BUSINESS_OWNER" });
+    const ad = await createRetailDraft(await ctxFor(RM), { daoCode: "DAO-1001", initiatorRole: "RM", productCode: "ALT_DRIVE", profile: "SALARY_EARNER", applicantType: "INDIVIDUAL" });
     const prof = async (id: string) => (await db.query("SELECT customer_profile FROM applications WHERE id = $1", [id])).rows[0].customer_profile;
     expect([await prof(vf.id), await prof(wb.id), await prof(ad.id)]).toEqual(["BUSINESS_OWNER", "BUSINESS_OWNER", "SALARY_EARNER"]);
     const ev = await audits("DRAFT_CREATED");
@@ -102,7 +102,7 @@ describe("Part B: customer type and product access", () => {
   });
 
   it("28. Delight Officers and Smile Associates still cannot originate retail products", async () => {
-    await fails(createRetailDraft(await ctxFor("do.ife@altbank.ng"), { initiatorRole: "DELIGHT_OFFICER", productCode: "ALT_DRIVE", profile: "SALARY_EARNER", applicantType: "INDIVIDUAL" }), "FORBIDDEN");
+    await fails(createRetailDraft(await ctxFor("do.ife@altbank.ng"), { daoCode: "DAO-1001", initiatorRole: "DELIGHT_OFFICER", productCode: "ALT_DRIVE", profile: "SALARY_EARNER", applicantType: "INDIVIDUAL" }), "FORBIDDEN");
   });
 });
 
@@ -173,7 +173,7 @@ describe("26-27. Product Settings: the salaried documentation update is staged, 
 
 describe("29. existing records are not reclassified", () => {
   it("WakeelBoost drafts created before this change keep no category", async () => {
-    const wb = await createDraft(await ctxFor(RM), { initiatorRole: "RM", applicantType: "ENTERPRISE" });
+    const wb = await createDraft(await ctxFor(RM), { daoCode: "DAO-1001", initiatorRole: "RM", applicantType: "ENTERPRISE" });
     await db.query("UPDATE applications SET customer_profile = NULL WHERE id = $1", [wb.id]); // as stored before
     expect((await db.query("SELECT count(*)::int AS n FROM applications WHERE customer_profile IS NULL")).rows[0].n).toBe(1);
     expect(ORIGINATION_PRODUCTS.map((p) => p.code)).toEqual(["WAKEELBOOST", "VENDOR_FINANCING", "ALT_DRIVE", "ALT_POWER"]);

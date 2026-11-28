@@ -11,6 +11,7 @@
  *   6. writes audit events and outbox notifications.
  * See docs/WORKFLOW.md for the state map.
  */
+import { DAO_CODE_MESSAGE, normaliseDaoCode } from "@/lib/dao";
 import { generateClosingDocuments, queueClosingDocuments } from "./closing-docs";
 import { disbursementBlockers, missingRequired } from "./closing-checklist";
 import { hasAcquisitionEvidence } from "./retail-ops";
@@ -225,7 +226,7 @@ export interface DraftInput {
   expectedLockVersion?: number | null;
 }
 
-export async function createDraft(ctx: Ctx, p: { initiatorRole: string; applicantType: ApplicantType; customerCategory?: string | null }) {
+export async function createDraft(ctx: Ctx, p: { initiatorRole: string; applicantType: ApplicantType; customerCategory?: string | null; daoCode?: string | null }) {
   const actor = ctx.actor;
   if (!actor) throw forbidden();
   if (!isLegacyInitiatorRole(p.initiatorRole)) throw forbidden("WakeelBoost is initiated by Relationship Managers, Agent Network Managers and Merchant Officers.");
@@ -248,6 +249,8 @@ export async function createDraft(ctx: Ctx, p: { initiatorRole: string; applican
     const seq = (await tx.query<{ n: string }>("SELECT nextval('application_ref_seq') AS n")).rows[0].n;
     if (p.initiatorRole === "DELIGHT_OFFICER") throw invalid("Delight Officers initiate retail products only.");
     const ref = `${LEGACY_REF_PREFIX}-${lagosDate(ctx.now).slice(0, 4)}-${String(seq).padStart(6, "0")}`;
+    const daoCode = normaliseDaoCode(p.daoCode);
+    if (!daoCode) throw invalid(DAO_CODE_MESSAGE, { daoCode: DAO_CODE_MESSAGE });
     const app = (
       await tx.query<{ id: string }>(
         `INSERT INTO applications (ref, applicant_type, initiator_id, initiator_role, region, business_unit, status, stage, created_at, updated_at, workflow, product_code, product_label, customer_profile)
@@ -257,7 +260,7 @@ export async function createDraft(ctx: Ctx, p: { initiatorRole: string; applican
     ).rows[0];
     await tx.query(
       `INSERT INTO application_versions (application_id, version_no, data, created_by, created_at) VALUES ($1,1,$2,$3,$4)`,
-      [app.id, JSON.stringify(draftDataSchema.parse({})), actor.staffId, ctx.now],
+      [app.id, JSON.stringify(draftDataSchema.parse({ daoCode })), actor.staffId, ctx.now],
     );
     await audit(tx, ctx, { action: "DRAFT_CREATED", actorRole: p.initiatorRole, applicationId: app.id, stage: "DRAFT", details: { ref, applicantType: p.applicantType, productCode: "WAKEELBOOST", customerCategory: "BUSINESS_OWNER" } });
     return { id: app.id, ref };

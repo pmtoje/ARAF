@@ -228,7 +228,7 @@ describe("rejection and correction routing", () => {
   it("submission validates rental coverage in Lagos time and the restricted fields", async () => {
     const rm = await ctxFor("rm.ade@altbank.ng");
     const { createDraft, submitApplication } = await import("@/server/domain/workflow");
-    const { id } = await createDraft(rm, { initiatorRole: "RM", applicantType: "INDIVIDUAL" });
+    const { id } = await createDraft(rm, { daoCode: "DAO-1001", initiatorRole: "RM", applicantType: "INDIVIDUAL" });
     await saveDraft(rm, id, { data: { rentStart: "2020-01-01", rentEnd: "2020-12-31" } });
     const err = await submitApplication(rm, id, key()).catch((e) => e);
     expect(err.fields.rentEnd).toMatch(/expired/);
@@ -244,7 +244,7 @@ describe("rejection and correction routing", () => {
   it("Limited requires every director with a BVN (no fixed cap)", async () => {
     const ctx = await ctxFor("anm.north@altbank.ng");
     const { createDraft } = await import("@/server/domain/workflow");
-    const { id } = await createDraft(ctx, { initiatorRole: "ANM", applicantType: "LIMITED" });
+    const { id } = await createDraft(ctx, { daoCode: "DAO-1001", initiatorRole: "ANM", applicantType: "LIMITED" });
     const many = Array.from({ length: 15 }, (_, i) => ({ fullName: `Director ${i + 1}`, bvn: `222000000${String(i).padStart(2, "0")}` }));
     await saveDraft(ctx, id, { data: { companyName: "Big Co Ltd" }, directors: many });
     const n = await db.query("SELECT count(*)::int AS n FROM application_directors d JOIN application_versions v ON v.id = d.version_id WHERE v.application_id = $1", [id]);

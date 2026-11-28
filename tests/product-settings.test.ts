@@ -291,8 +291,8 @@ describe("10. Origination roles drive cards, pages and the server", () => {
     expect(visibleProducts(["TEAM_LEAD"], settings).map((p) => p.code)).toContain("VENDOR_FINANCING");
     const vf = ORIGINATION_PRODUCTS.find((p) => p.code === "VENDOR_FINANCING")!;
     expect((await availability(db, vf, ["RM"], new Date())).status).toBe("NOT_PERMITTED");
-    await fails(createRetailDraft(await ctxFor("rm.bola@altbank.ng"), { initiatorRole: "RM", productCode: "VENDOR_FINANCING", profile: "BUSINESS_OWNER", applicantType: "ENTERPRISE" }), "FORBIDDEN");
-    await createRetailDraft(await ctxFor("tl.lagos@altbank.ng"), { initiatorRole: "TEAM_LEAD", productCode: "VENDOR_FINANCING", profile: "BUSINESS_OWNER", applicantType: "ENTERPRISE" });
+    await fails(createRetailDraft(await ctxFor("rm.bola@altbank.ng"), { daoCode: "DAO-1001", initiatorRole: "RM", productCode: "VENDOR_FINANCING", profile: "BUSINESS_OWNER", applicantType: "ENTERPRISE" }), "FORBIDDEN");
+    await createRetailDraft(await ctxFor("tl.lagos@altbank.ng"), { daoCode: "DAO-1001", initiatorRole: "TEAM_LEAD", productCode: "VENDOR_FINANCING", profile: "BUSINESS_OWNER", applicantType: "ENTERPRISE" });
   });
 
   it("roles outside the product type can never be added", async () => {
@@ -303,7 +303,7 @@ describe("10. Origination roles drive cards, pages and the server", () => {
   it("closing a product stops new requests", async () => {
     await edit("VENDOR_FINANCING", (_c, g) => (g.active = false));
     await publish("VENDOR_FINANCING");
-    await fails(createRetailDraft(await ctxFor("rm.bola@altbank.ng"), { initiatorRole: "RM", productCode: "VENDOR_FINANCING", profile: "BUSINESS_OWNER", applicantType: "ENTERPRISE" }));
+    await fails(createRetailDraft(await ctxFor("rm.bola@altbank.ng"), { daoCode: "DAO-1001", initiatorRole: "RM", productCode: "VENDOR_FINANCING", profile: "BUSINESS_OWNER", applicantType: "ENTERPRISE" }));
   });
 });
 
@@ -326,8 +326,8 @@ describe("12. WakeelBoost keeps its settings logic", () => {
     await saveGeneralDirect(ctx, "WAKEELBOOST", g, REASON);
     expect(await getProduct(db, "WAKEELBOOST")).toMatchObject({ owner: "Head of Agency", origination_roles: ["ANM"] });
     expect(await audits("PRODUCT_GENERAL_SETTINGS_CHANGED")).toHaveLength(1);
-    await fails(createDraft(await ctxFor("rm.ade@altbank.ng"), { initiatorRole: "RM", applicantType: "INDIVIDUAL" }), "FORBIDDEN");
-    await createDraft(await ctxFor("anm.south@altbank.ng"), { initiatorRole: "ANM", applicantType: "INDIVIDUAL" });
+    await fails(createDraft(await ctxFor("rm.ade@altbank.ng"), { daoCode: "DAO-1001", initiatorRole: "RM", applicantType: "INDIVIDUAL" }), "FORBIDDEN");
+    await createDraft(await ctxFor("anm.south@altbank.ng"), { daoCode: "DAO-1001", initiatorRole: "ANM", applicantType: "INDIVIDUAL" });
     await fails(saveGeneralDirect(ctx, "WAKEELBOOST", { ...g, originationRoles: ["UNIT_HEAD"] }, REASON), "VALIDATION");
   });
 

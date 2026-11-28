@@ -1,6 +1,7 @@
 "use client";
 import { ActionForm, SubmitButton } from "@/components/forms";
 import { createDraftAction } from "../actions";
+import { DAO_CODE_HINT } from "@/lib/dao";
 
 const TYPES = [
   { v: "INDIVIDUAL", t: "Individual", d: "A person trading in their own name. BVN required." },
@@ -12,6 +13,13 @@ export function NewRequestForm({ roles, defaultRole }: { roles: { value: string;
   return (
     <ActionForm action={createDraftAction} refreshOnSuccess={false}>
       <input type="hidden" name="customerCategory" value="BUSINESS_OWNER" />
+      <div className="field" style={{ maxWidth: 360 }}>
+        <label htmlFor="daoCode">DAO code</label>
+        <input id="daoCode" name="daoCode" required minLength={2} maxLength={30} autoComplete="off" placeholder="e.g. DAO-1001" style={{ textTransform: "uppercase" }} aria-describedby="daoCode-hint" />
+        <span className="hint" id="daoCode-hint">
+          {DAO_CODE_HINT}. Required before anything else; it identifies the account officer on this request.
+        </span>
+      </div>
       <fieldset style={{ border: "none", padding: 0, margin: 0 }}>
         <legend style={{ fontWeight: 700, marginBottom: 8 }}>Applicant type</legend>
         <div className="choice-grid">
